@@ -1,0 +1,27 @@
+# Python dependencies
+# Will be populated with required packages
+
+fastapi
+uvicorn[standard]
+sqlmodel
+pydantic
+pydantic-settings
+python-dotenv
+aiofiles
+httpx
+langgraph
+openai
+langchain
+transformers
+torch
+opencv-python-headless
+librosa
+sounddevice
+scipy
+Pillow
+scikit-learn
+joblib
+twilio
+pytest
+python-multipart
+pytest-asyncio

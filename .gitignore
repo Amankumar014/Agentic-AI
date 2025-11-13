@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+myenv/
+myenv
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# Temporary files
+temp/
+
+# Models (can be large)
+models/*.joblib
+models/*.pkl
+models/*.h5
+models/*.pt
+models/*.pth
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
