@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 16000  # Hz
     AUDIO_DURATION: int = 3  # seconds
     
+    # Alert Cooldown Settings
+    ALERT_COOLDOWN_MINUTES: int = 5  # minutes between alerts of same type
+    
     if SettingsConfigDict is not None:
         model_config = SettingsConfigDict(
             env_file=".env",

@@ -1,6 +1,7 @@
 """
 Notification service for sending alerts via email and SMS.
 Handles email (SMTP) and SMS (Twilio) notifications with logging.
+Includes cooldown management to prevent alert spam.
 """
 import smtplib
 from email.mime.text import MIMEText
@@ -9,6 +10,7 @@ from typing import Optional, Tuple
 
 from src.config import get_settings
 from src.models import get_session, AlertLog
+from src.alert_manager import get_alert_manager, AlertType
 
 
 def send_email(subject: str, body: str) -> bool:
@@ -214,6 +216,8 @@ def send_risk_alert(risk_level: str, position: str, notes: str) -> Tuple[bool, b
     """
     Send a risk-based alert with formatted message.
     
+    Includes cooldown logic to prevent alert spam.
+    
     Args:
         risk_level: Risk level (safe, monitor, caution, alert)
         position: Baby's position description
@@ -223,6 +227,26 @@ def send_risk_alert(risk_level: str, position: str, notes: str) -> Tuple[bool, b
         Tuple of (email_success, sms_success, log_id)
     """
     from datetime import datetime
+    
+    # Map risk level to alert type for cooldown
+    risk_to_alert_type = {
+        "alert": AlertType.HIGH_RISK,
+        "danger": AlertType.HIGH_RISK,
+        "caution": AlertType.BABY_DISTRESSED,
+        "monitor": AlertType.BABY_DISTRESSED,
+        "safe": AlertType.GENERAL
+    }
+    
+    cooldown_type = risk_to_alert_type.get(risk_level.lower(), AlertType.GENERAL)
+    
+    # Check cooldown
+    alert_manager = get_alert_manager()
+    if not alert_manager.should_send_alert(cooldown_type):
+        print(f"\n🔕 Risk alert skipped due to cooldown: {risk_level}")
+        status = alert_manager.get_cooldown_status(cooldown_type)
+        remaining = status['cooldown_remaining_seconds']
+        print(f"   Retry available in: {int(remaining/60)}m {int(remaining%60)}s")
+        return False, False, None
     
     risk_emojis = {
         "safe": "✅",
@@ -243,12 +267,22 @@ def send_risk_alert(risk_level: str, position: str, notes: str) -> Tuple[bool, b
         f"Please check the baby monitor."
     )
     
-    return send_alert(alert_type=f"risk_{risk_level}", message=message)
+    print(f"\n📤 Sending risk alert: {risk_level} ({cooldown_type})")
+    email_ok, sms_ok, log_id = send_alert(alert_type=f"risk_{risk_level}", message=message)
+    
+    # Record successful alert
+    if email_ok or sms_ok:
+        alert_manager.record_alert_sent(cooldown_type)
+        print(f"✅ Risk alert sent and cooldown timer started")
+    
+    return email_ok, sms_ok, log_id
 
 
 def send_movement_alert(movement_level: str, position: str) -> Tuple[bool, bool, Optional[int]]:
     """
     Send a movement-based alert with formatted message.
+    
+    Includes cooldown logic to prevent alert spam.
     
     Args:
         movement_level: Movement level (none, minimal, low, moderate, high)
@@ -258,6 +292,18 @@ def send_movement_alert(movement_level: str, position: str) -> Tuple[bool, bool,
         Tuple of (email_success, sms_success, log_id)
     """
     from datetime import datetime
+    
+    # High movement gets its own type, others are general
+    cooldown_type = AlertType.HIGH_MOVEMENT if movement_level.lower() == "high" else AlertType.GENERAL
+    
+    # Check cooldown
+    alert_manager = get_alert_manager()
+    if not alert_manager.should_send_alert(cooldown_type):
+        print(f"\n🔕 Movement alert skipped due to cooldown: {movement_level}")
+        status = alert_manager.get_cooldown_status(cooldown_type)
+        remaining = status['cooldown_remaining_seconds']
+        print(f"   Retry available in: {int(remaining/60)}m {int(remaining%60)}s")
+        return False, False, None
     
     timestamp = datetime.now().strftime("%I:%M %p")
     
@@ -269,7 +315,15 @@ def send_movement_alert(movement_level: str, position: str) -> Tuple[bool, bool,
         f"Baby is active. Check monitor for details."
     )
     
-    return send_alert(alert_type="movement", message=message)
+    print(f"\n📤 Sending movement alert: {movement_level} ({cooldown_type})")
+    email_ok, sms_ok, log_id = send_alert(alert_type="movement", message=message)
+    
+    # Record successful alert
+    if email_ok or sms_ok:
+        alert_manager.record_alert_sent(cooldown_type)
+        print(f"✅ Movement alert sent and cooldown timer started")
+    
+    return email_ok, sms_ok, log_id
 
 
 if __name__ == "__main__":

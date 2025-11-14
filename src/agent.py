@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 
 from src.config import get_settings
 from src.notifier import send_alert, send_risk_alert
+from src.alert_manager import get_alert_manager, AlertType
 
 
 def decision_from_vision(
@@ -156,6 +157,9 @@ def send_alert_for_decision(
     """
     Compose and send an alert based on analysis results.
     
+    Includes cooldown logic to prevent alert spam. Alerts are only sent
+    if the cooldown period has passed for the specific alert type.
+    
     Args:
         vision_json: Vision analysis results
         audio_json: Optional audio analysis results
@@ -177,19 +181,34 @@ def send_alert_for_decision(
     risk_lower = risk.lower()
     if risk_lower in ["alert", "danger"] or "fall" in risk_lower or "distress" in risk_lower:
         alert_type = "urgent_risk"
+        cooldown_type = AlertType.HIGH_RISK
         emoji = "🚨"
     elif risk_lower == "caution":
         alert_type = "caution"
+        cooldown_type = AlertType.BABY_DISTRESSED
         emoji = "⚠️"
     elif not baby_detected:
         alert_type = "baby_not_detected"
+        cooldown_type = AlertType.BABY_ABSENT
         emoji = "❗"
     elif movement_level == "high":
         alert_type = "high_movement"
+        cooldown_type = AlertType.HIGH_MOVEMENT
         emoji = "🏃"
     else:
         alert_type = "general"
+        cooldown_type = AlertType.GENERAL
         emoji = "ℹ️"
+    
+    # Check cooldown before sending
+    alert_manager = get_alert_manager()
+    if not alert_manager.should_send_alert(cooldown_type):
+        print(f"\n🔕 Alert skipped due to cooldown: {alert_type}")
+        print(f"   Reason would have been: {reason}")
+        status = alert_manager.get_cooldown_status(cooldown_type)
+        remaining = status['cooldown_remaining_seconds']
+        print(f"   Retry available in: {int(remaining/60)}m {int(remaining%60)}s")
+        return False, False, None
     
     # Add audio context if available
     audio_context = ""
@@ -222,7 +241,15 @@ def send_alert_for_decision(
     message += "\n⚠️ Please check the baby monitor immediately!"
     
     # Send alert
-    return send_alert(alert_type=alert_type, message=message)
+    print(f"\n📤 Sending alert: {alert_type} ({cooldown_type})")
+    email_ok, sms_ok, log_id = send_alert(alert_type=alert_type, message=message)
+    
+    # Record successful alert for cooldown tracking
+    if email_ok or sms_ok:
+        alert_manager.record_alert_sent(cooldown_type)
+        print(f"✅ Alert successfully sent and cooldown timer started")
+    
+    return email_ok, sms_ok, log_id
 
 
 def evaluate_multiple_frames(
