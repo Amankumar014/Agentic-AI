@@ -3,6 +3,9 @@ import { TopNavigation } from './components';
 import Dashboard from './pages/Dashboard';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
+import LiveFeed from './pages/LiveFeed';
+import SleepLogs from './pages/SleepLogs';
+import Activity from './pages/Activity';
 import wsService from './services/WebSocketService';
 
 /**
@@ -36,6 +39,12 @@ function App() {
 
   const renderCurrentPage = () => {
     switch (currentPage) {
+      case 'live':
+        return <LiveFeed config={config} />;
+      case 'sleep':
+        return <SleepLogs />;
+      case 'activity':
+        return <Activity />;
       case 'alerts':
         return <Alerts />;
       case 'settings':
