@@ -15,6 +15,7 @@ langchain
 transformers
 torch
 opencv-python-headless
+mediapipe
 librosa
 sounddevice
 scipy
@@ -22,6 +23,8 @@ Pillow
 scikit-learn
 joblib
 twilio
+ultralytics
+tensorflow
 pytest
 python-multipart
 pytest-asyncio

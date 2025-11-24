@@ -53,6 +53,17 @@ class Settings(BaseSettings):
     # Alert Cooldown Settings
     ALERT_COOLDOWN_MINUTES: int = 5  # minutes between alerts of same type
     
+    # Computer Vision / ML Models
+    YOLO_MODEL_PATH: str = "yolov8n.pt"
+    EMOTION_MODEL_PATH: str = "ml_models/best_model.h5"
+    
+    # Movement Tracking Thresholds
+    MOVEMENT_STILL_THRESHOLD: float = 0.35
+    MOVEMENT_MICRO_THRESHOLD: float = 0.85
+    MOVEMENT_MAJOR_THRESHOLD: float = 2.0
+    MOVEMENT_JERK_DELTA: float = 1.2
+    MOVEMENT_STILLNESS_ALERT_SECONDS: int = 60
+    
     if SettingsConfigDict is not None:
         model_config = SettingsConfigDict(
             env_file=".env",

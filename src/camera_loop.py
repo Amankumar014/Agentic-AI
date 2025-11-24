@@ -71,10 +71,20 @@ def post_frame_to_server(frame_bytes: bytes, server_url: str, timeout: float = 3
                     result = response.json()
                     print(f"✅ Frame posted successfully")
                     
+                    analysis = result.get("analysis") or {}
+                    if analysis:
+                        final_state = analysis.get("final_state", "unknown")
+                        risk = analysis.get("risk", "unknown")
+                        movement = analysis.get("movement_level", "unknown")
+                        notes = analysis.get("notes")
+                        print(f"   • State: {final_state} | Risk: {risk} | Movement: {movement}")
+                        if notes:
+                            print(f"   • Notes: {notes}")
+                    
                     # Log key response details
                     if 'alert' in result:
                         alert = result.get('alert', False)
-                        reason = result.get('reason', 'N/A')
+                        reason = result.get('alert_reason') or result.get('reason', 'N/A')
                         if alert:
                             print(f"   🚨 ALERT: {reason}")
                         else:

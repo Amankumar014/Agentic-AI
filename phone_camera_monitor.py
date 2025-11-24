@@ -95,20 +95,21 @@ def capture_from_ip_webcam(ip_webcam_url: str, server_url: str, interval: int = 
                         
                         print(f"   ✅ Analysis complete!")
                         
-                        # Show key results
-                        if 'analysis' in result:
-                            analysis = result['analysis']
-                            baby_detected = analysis.get('baby_detected', False)
+                        analysis = result.get('analysis') or {}
+                        if analysis:
+                            final_state = analysis.get('final_state', 'unknown')
                             risk = analysis.get('risk', 'unknown')
                             movement = analysis.get('movement_level', 'unknown')
+                            notes = analysis.get('notes')
                             
-                            print(f"      Baby: {'✓ Detected' if baby_detected else '✗ Not detected'}")
-                            print(f"      Risk: {risk}")
-                            print(f"      Movement: {movement}")
+                            print(f"      State: {final_state} | Risk: {risk} | Movement: {movement}")
+                            if notes:
+                                print(f"      Notes: {notes}")
                         
                         # Check for alerts
                         if result.get('alert'):
-                            print(f"      🚨 ALERT: {result.get('reason')}")
+                            reason = result.get('alert_reason') or result.get('reason')
+                            print(f"      🚨 ALERT: {reason}")
                         else:
                             print(f"      ✓ Safe")
                     

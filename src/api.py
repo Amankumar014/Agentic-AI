@@ -60,7 +60,7 @@ async def upload_frame(file: UploadFile = File(...)):
         audio_bytes = None
         
         # Run the LangGraph workflow
-        # This orchestrates: CameraInput -> Vision -> Audio -> Decision -> Alert -> Logger
+        # Pipeline: CameraInput -> YOLO -> Pose -> Movement -> Emotion -> Azure Fusion -> Alert/Logger
         print(f"\n🚀 Triggering LangGraph workflow for frame analysis...")
         
         workflow_result = await run_blocking(
@@ -70,34 +70,29 @@ async def upload_frame(file: UploadFile = File(...)):
         )
         
         # Map workflow result to API response format
+        decision = workflow_result.get("decision_result", {}) or {}
+        fusion = workflow_result.get("fusion_result", {}) or {}
         response = {
             "status": workflow_result.get("status", "unknown"),
             "timestamp": workflow_result.get("timestamp", datetime.utcnow().isoformat()),
-            
-            # Vision analysis results
-            "analysis": workflow_result.get("vision_result", {}),
-            
-            # Audio analysis results (if available)
+            "analysis": fusion,
+            "agents": {
+                "yolo": workflow_result.get("yolo_result"),
+                "pose": workflow_result.get("pose_result"),
+                "movement": workflow_result.get("movement_result"),
+                "emotion": workflow_result.get("emotion_result"),
+                "audio": workflow_result.get("audio_result"),
+            },
             "audio": workflow_result.get("audio_result"),
-            
-            # Agent decision
-            "decision": workflow_result.get("decision_result", {}),
-            
-            # Alert information
-            "alert": workflow_result.get("decision_result", {}).get("alert", False),
+            "decision": decision,
+            "alert": decision.get("alert", False),
+            "alert_reason": decision.get("reason"),
             "alert_sent": workflow_result.get("alert_result", {}).get("sent", False),
-            
-            # Database log IDs
+            "alert_payload": workflow_result.get("alert_result"),
             "log_ids": workflow_result.get("log_ids", {}),
-            "log_id": workflow_result.get("log_ids", {}).get("frame_log_id"),
-            
-            # Errors if any
-            "errors": workflow_result.get("errors", [])
+            "errors": workflow_result.get("errors", []),
         }
-        
-        # Add reason if alert was triggered
-        if response["alert"]:
-            response["reason"] = workflow_result.get("decision_result", {}).get("reason")
+        response["log_id"] = response["log_ids"].get("frame_log_id")
         
         return JSONResponse(content=response)
     
@@ -167,34 +162,29 @@ async def upload_frame_with_audio(
         )
         
         # Map workflow result to API response format
+        decision = workflow_result.get("decision_result", {}) or {}
+        fusion = workflow_result.get("fusion_result", {}) or {}
         response = {
             "status": workflow_result.get("status", "unknown"),
             "timestamp": workflow_result.get("timestamp", datetime.utcnow().isoformat()),
-            
-            # Vision analysis results
-            "analysis": workflow_result.get("vision_result", {}),
-            
-            # Audio analysis results
+            "analysis": fusion,
+            "agents": {
+                "yolo": workflow_result.get("yolo_result"),
+                "pose": workflow_result.get("pose_result"),
+                "movement": workflow_result.get("movement_result"),
+                "emotion": workflow_result.get("emotion_result"),
+                "audio": workflow_result.get("audio_result"),
+            },
             "audio": workflow_result.get("audio_result"),
-            
-            # Agent decision
-            "decision": workflow_result.get("decision_result", {}),
-            
-            # Alert information
-            "alert": workflow_result.get("decision_result", {}).get("alert", False),
+            "decision": decision,
+            "alert": decision.get("alert", False),
+            "alert_reason": decision.get("reason"),
             "alert_sent": workflow_result.get("alert_result", {}).get("sent", False),
-            
-            # Database log IDs
+            "alert_payload": workflow_result.get("alert_result"),
             "log_ids": workflow_result.get("log_ids", {}),
-            "log_id": workflow_result.get("log_ids", {}).get("frame_log_id"),
-            
-            # Errors if any
-            "errors": workflow_result.get("errors", [])
+            "errors": workflow_result.get("errors", []),
         }
-        
-        # Add reason if alert was triggered
-        if response["alert"]:
-            response["reason"] = workflow_result.get("decision_result", {}).get("reason")
+        response["log_id"] = response["log_ids"].get("frame_log_id")
         
         return JSONResponse(content=response)
     

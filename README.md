@@ -5,9 +5,10 @@ AI-powered baby monitoring system with Azure OpenAI Vision, real-time frame anal
 ## 🎯 Features
 
 - **Real-time Video Monitoring**: OpenCV camera capture with configurable intervals
-- **Azure Vision AI**: GPT-4 Vision analysis for baby detection, movement tracking, and risk assessment
+- **Multi-Agent CV Pipeline**: YOLO detector → MediaPipe pose → Optical-flow movement → Emotion classifier
+- **Azure Vision AI Fusion**: GPT-4o Vision combines structured signals + frame for final judgement
 - **Audio Analysis**: Cry detection with librosa feature extraction (optional)
-- **Rule-Based Agent**: Intelligent alert decision-making with vision + audio fusion
+- **State Evaluation Agent**: Intelligent alert decision-making with fused multi-modal context
 - **Multi-Channel Alerts**: Email (SMTP) and SMS (Twilio) notifications
 - **RESTful API**: FastAPI endpoints for frame upload, logs, and alerts
 - **Database Logging**: SQLModel/SQLite for analysis and alert history
@@ -182,34 +183,38 @@ python src/audio_agent_placeholder.py --record
 
 ### Analysis Pipeline (LangGraph Orchestration)
 
-The API uses **LangGraph workflow** to orchestrate the entire pipeline:
+The API uses **LangGraph** to orchestrate a multi-modal workflow:
 
 ```
-Camera → Upload to API → LangGraph Workflow
-                              ↓
-                    ┌─────────────────┐
-                    │ CameraInputNode │ - Save frame/audio to temp
-                    └────────┬────────┘
-                             ↓
-                    ┌─────────────────┐
-                    │  VisionAgent    │ - Azure OpenAI Vision analysis
-                    └────────┬────────┘
-                             ↓
-                    ┌─────────────────┐
-                    │  AudioAgent     │ - Feature extraction & cry detection
-                    └────────┬────────┘
-                             ↓
-                    ┌─────────────────┐
-                    │ DecisionAgent   │ - Rule-based alert decision
-                    └────────┬────────┘
-                             ↓
-                    ┌─────────────────┐
-                    │  AlertAgent     │ - Send email/SMS notifications
-                    └────────┬────────┘
-                             ↓
-                    ┌─────────────────┐
-                    │  LoggerAgent    │ - Store in database
-                    └─────────────────┘
+Camera → Upload → LangGraph Workflow
+                       ↓
+             ┌─────────────────────┐
+             │  Camera Input Node  │  Decode + persist frame/audio
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │   YOLO Baby Agent   │  Baby/adult/person detections
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │   Pose Agent        │  MediaPipe posture classification
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │ Movement Agent      │  Optical-flow micro/macro motion
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │ Emotion Agent       │  TF emotion classifier on ROI
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │ Azure Fusion Agent  │  GPT-4o Vision final reasoning
+             └──────────┬──────────┘
+                        ↓
+             ┌─────────────────────┐
+             │ Alert+Logger Agents │  Cooldown-aware alerts + DB logs
+             └─────────────────────┘
 ```
 
 See [LANGGRAPH_WORKFLOW.md](LANGGRAPH_WORKFLOW.md) for detailed workflow documentation.

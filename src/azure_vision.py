@@ -5,7 +5,7 @@ Analyzes baby monitor frames using Azure GPT-4 Vision.
 import base64
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import httpx
 
@@ -23,7 +23,17 @@ Your response must be valid JSON with these exact keys:
 }
 
 Guidelines:
-- baby_detected: true if you can see a baby/infant in the image
+- baby_detected: CRITICAL - Set to TRUE if you can see ANY of the following in the image:
+  * A baby, infant, or small child (any age from newborn to toddler)
+  * Any part of a baby (face, body, limbs, even if partially visible)
+  * A baby in any position (lying down, sitting, standing, being held, in a crib, on a bed, etc.)
+  * A baby in any lighting condition (bright, dim, shadows are OK)
+  * A baby at any angle or distance (close-up, far away, side view, top view, etc.)
+  * A baby wearing any clothing or wrapped in blankets
+  * A baby that is moving or still
+  * A baby that is crying, sleeping, or awake
+  ONLY set to FALSE if you are CERTAIN there is NO baby, infant, or child visible anywhere in the image.
+  When in doubt, set to TRUE - it's better to detect a baby that might not be there than to miss one.
 
 - movement_level: assess based on visible motion blur, posture changes, limb movement
 
@@ -64,6 +74,47 @@ CRITICAL INSTRUCTIONS - READ CAREFULLY:
 If there is ANY doubt about whether the baby is crying, describe what you see in detail and lean toward "monitor" risk level for safety.
 
 Respond with ONLY the JSON object, no other text."""
+
+
+FINAL_STATES = [
+    "sleeping",
+    "awake",
+    "crying",
+    "distressed",
+    "in_unsafe_posture",
+    "missing_from_frame",
+    "adult_intrusion",
+]
+
+MULTIMODAL_SYSTEM_PROMPT = """You are the final decision layer of a baby monitoring system. 
+You receive: 
+1) Structured sensor outputs (YOLO detections, pose, movement, emotion)
+2) The actual frame image
+
+TASK: Fuse all information and produce a SINGLE JSON object (no markdown) with:
+{
+  "final_state": one of ["sleeping","awake","crying","distressed","in_unsafe_posture","missing_from_frame","adult_intrusion"],
+  "confidence": float 0-1,
+  "baby_detected": boolean,
+  "adult_detected": boolean,
+  "adult_intrusion": boolean,
+  "risk": one of ["safe","monitor","caution","alert"],
+  "movement_level": string summary (still/micro/active/major/sudden_jerk),
+  "notes": short string referencing *specific* evidence,
+  "reasoning": concise explanation referencing the sensor evidence,
+  "recommended_action": string describing what caregivers should do,
+  "status_flags": array of short bullet strings summarizing notable signals
+}
+
+Rules:
+- Never make up signals that sensors did not report.
+- If the baby is missing or occluded, final_state = "missing_from_frame".
+- Adult intrusion is TRUE when adult_detected and baby_detected simultaneously.
+- Unsafe posture when pose reports rolling/unusual and baby appears at risk.
+- Distressed includes pain, uncomfortable, or high movement with crying emotion.
+- Adjust risk: sleeping->safe, awake->monitor, crying->monitor, distressed/unsafe/adult/missing->alert.
+- Keep JSON valid and lowercase strings as shown.
+"""
 
 
 async def analyze_image_bytes(
@@ -139,7 +190,7 @@ async def analyze_image_bytes(
                         },
                         {
                             "type": "text",
-                            "text": "Analyze this baby monitor frame. Look VERY CAREFULLY at the baby's facial expression - is the mouth open? Is the face tense or scrunched? Does the baby appear to be crying or calm? Provide your assessment in JSON format."
+                            "text": "Analyze this baby monitor frame. FIRST, determine if there is a baby, infant, or child visible in the image - look carefully for any human figure, face, body, or limbs that could be a baby. If you see ANY sign of a baby (even partially visible, in shadows, or at unusual angles), set baby_detected to TRUE. THEN, if a baby is detected, look VERY CAREFULLY at the baby's facial expression - is the mouth open? Is the face tense or scrunched? Does the baby appear to be crying or calm? Provide your assessment in JSON format."
                         }
                     ]
                 }
@@ -204,7 +255,15 @@ async def analyze_image_bytes(
                 }
             
             # Parse the JSON response
-            return parse_vision_response(content)
+            parsed_result = parse_vision_response(content)
+            
+            # Debug: Print warning if baby not detected
+            if not parsed_result.get("baby_detected", False) and "error" not in parsed_result:
+                print("\n⚠️  WARNING: Baby not detected in frame")
+                print(f"   Raw response: {content[:500]}...")
+                print(f"   Parsed result: {parsed_result}")
+            
+            return parsed_result
     
     except httpx.TimeoutException:
         return {
@@ -280,6 +339,279 @@ def parse_vision_response(content: str) -> Dict[str, Any]:
             "raw_text": content,
             "baby_detected": False
         }
+
+
+async def analyze_multimodal_state(
+    image_bytes: bytes,
+    fused_context: Dict[str, Any],
+    timeout: float = 45.0,
+    max_tokens: int = 600,
+    debug: bool = False,
+) -> Dict[str, Any]:
+    """
+    Run Azure Vision as the final reasoning layer over multi-agent signals.
+    """
+    from src.config import get_settings
+
+    settings = get_settings()
+    if not (
+        settings.AZURE_OPENAI_ENDPOINT
+        and settings.AZURE_OPENAI_API_KEY
+        and settings.AZURE_OPENAI_DEPLOYMENT
+    ):
+        fallback = _local_multimodal_reasoning(fused_context)
+        fallback["reasoning"] = "Azure not configured - used local fusion"
+        return fallback
+
+    try:
+        base64_image = base64.b64encode(image_bytes).decode("utf-8")
+    except Exception as exc:
+        fallback = _local_multimodal_reasoning(fused_context)
+        fallback["reasoning"] = f"Image encoding failed ({exc}) - local fusion"
+        return fallback
+
+    endpoint = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
+    deployment = settings.AZURE_OPENAI_DEPLOYMENT
+    api_version = "2024-02-15-preview"
+    url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+
+    context_text = json.dumps(_json_safe(fused_context), indent=2)
+    payload = {
+        "messages": [
+            {
+                "role": "system",
+                "content": MULTIMODAL_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Sensor summary JSON:\n" + context_text,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                    },
+                ],
+            },
+        ],
+        "max_tokens": max_tokens,
+        "temperature": 0.1,
+    }
+
+    headers = {
+        "api-key": settings.AZURE_OPENAI_API_KEY,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(url, json=payload, headers=headers)
+
+        if response.status_code != 200:
+            raise httpx.HTTPStatusError(
+                f"Azure status {response.status_code}: {response.text}",
+                request=response.request,
+                response=response,
+            )
+
+        data = response.json()
+        choices = data.get("choices", [])
+        if not choices:
+            raise ValueError("Azure response missing choices")
+
+        content = choices[0].get("message", {}).get("content", "")
+        if debug:
+            print("\n" + "=" * 70)
+            print("🔍 DEBUG: RAW MULTIMODAL AZURE RESPONSE")
+            print("=" * 70)
+            print(content)
+            print("=" * 70 + "\n")
+
+        parsed = parse_multimodal_response(content)
+        if "error" in parsed:
+            fallback = _local_multimodal_reasoning(fused_context)
+            fallback["reasoning"] = f"Azure parse error: {parsed['error']}"
+            fallback["raw_response"] = parsed.get("raw_text")
+            return fallback
+
+        parsed["signals_used"] = fused_context
+        return parsed
+
+    except (httpx.RequestError, httpx.HTTPStatusError, json.JSONDecodeError, ValueError) as exc:
+        fallback = _local_multimodal_reasoning(fused_context)
+        fallback["reasoning"] = f"Azure fusion call failed: {exc}"
+        return fallback
+
+
+def parse_multimodal_response(content: str) -> Dict[str, Any]:
+    """Parse Azure's multimodal reasoning response."""
+    try:
+        cleaned = content.strip()
+        cleaned = re.sub(r"^```(?:json)?\s*\n", "", cleaned)
+        cleaned = re.sub(r"\n```\s*$", "", cleaned)
+        payload = json.loads(cleaned)
+
+        required = [
+            "final_state",
+            "confidence",
+            "baby_detected",
+            "risk",
+            "notes",
+            "reasoning",
+            "status_flags",
+        ]
+        missing = [k for k in required if k not in payload]
+        if missing:
+            return {
+                "error": f"Missing keys: {', '.join(missing)}",
+                "raw_text": content,
+            }
+
+        final_state = str(payload.get("final_state", "awake")).lower()
+        if final_state not in FINAL_STATES:
+            final_state = "awake"
+
+        confidence = float(payload.get("confidence", 0.6))
+        confidence = max(0.0, min(confidence, 1.0))
+
+        status_flags = payload.get("status_flags") or []
+        if not isinstance(status_flags, list):
+            status_flags = [str(status_flags)]
+
+        result = {
+            "final_state": final_state,
+            "confidence": confidence,
+            "baby_detected": bool(payload.get("baby_detected", False)),
+            "adult_detected": bool(payload.get("adult_detected", False)),
+            "adult_intrusion": bool(payload.get("adult_intrusion", False)),
+            "risk": str(payload.get("risk", "monitor")).lower(),
+            "movement_level": payload.get("movement_level", "unknown"),
+            "notes": payload.get("notes", ""),
+            "reasoning": payload.get("reasoning", ""),
+            "recommended_action": payload.get("recommended_action", ""),
+            "status_flags": status_flags,
+        }
+        return result
+    except Exception as exc:
+        return {
+            "error": f"Multimodal parse error: {exc}",
+            "raw_text": content,
+        }
+
+
+def _local_multimodal_reasoning(fused_context: Dict[str, Any]) -> Dict[str, Any]:
+    """Fallback heuristic fusion when Azure is unavailable."""
+    yolo = fused_context.get("yolo_result") or {}
+    pose = fused_context.get("pose_result") or {}
+    movement = fused_context.get("movement_result") or {}
+    emotion = fused_context.get("emotion_result") or {}
+
+    baby_detected = bool(yolo.get("baby_detected") or pose.get("pose_label") in {"sleeping", "sitting", "standing"})
+    adult_detected = bool(yolo.get("adult_detected"))
+    adult_intrusion = bool(yolo.get("adult_intrusion"))
+    pose_label = str(pose.get("pose_label", "unknown")).lower()
+    emotion_label = str(emotion.get("emotion_label", "neutral")).lower()
+    movement_type = str(movement.get("movement_type", "unknown")).lower()
+    sudden = movement.get("sudden_jerk", False)
+
+    if not baby_detected:
+        final_state = "missing_from_frame"
+    elif adult_intrusion:
+        final_state = "adult_intrusion"
+    elif pose_label in {"sleeping"} and emotion_label in {"neutral", "happy"} and movement_type in {"still", "micro_movement", "initializing"}:
+        final_state = "sleeping"
+    elif pose_label in {"rolling", "unusual_posture"}:
+        final_state = "in_unsafe_posture"
+    elif emotion_label in {"crying"}:
+        # Only crying if emotion explicitly shows crying
+        final_state = "crying"
+    elif emotion_label in {"distress", "pain"} or (emotion_label == "uncomfortable" and movement_type in {"major_movement"}):
+        # Distressed if pain/distress detected, or uncomfortable with major movement
+        final_state = "distressed"
+    elif sudden and emotion_label not in {"happy", "neutral"}:
+        # Sudden jerk with non-positive emotion may indicate distress
+        final_state = "distressed"
+    elif emotion_label == "happy" or (emotion_label == "neutral" and movement_type in {"active", "major_movement"}):
+        # Happy or neutral with movement = awake and active
+        final_state = "awake"
+    elif movement_type in {"still", "micro_movement"} and emotion_label in {"neutral"}:
+        # Still and neutral = possibly sleeping or calm
+        final_state = "sleeping"
+    else:
+        # Default to awake for any other combination
+        final_state = "awake"
+
+    risk = _derive_risk(final_state)
+    notes = []
+    if emotion_label:
+        notes.append(f"Emotion: {emotion_label}")
+    if pose_label:
+        notes.append(f"Pose: {pose_label}")
+    if movement_type:
+        notes.append(f"Movement: {movement_type}")
+    if adult_intrusion:
+        notes.append("Adult present with baby")
+
+    status_flags = []
+    if sudden:
+        status_flags.append("Sudden jerk detected")
+    if movement.get("stillness_exceeded"):
+        status_flags.append("Baby still for extended period")
+    if adult_intrusion:
+        status_flags.append("Adult intrusion detected")
+
+    return {
+        "final_state": final_state,
+        "confidence": 0.6,
+        "baby_detected": baby_detected,
+        "adult_detected": adult_detected,
+        "adult_intrusion": adult_intrusion,
+        "risk": risk,
+        "movement_level": movement_type,
+        "notes": " | ".join(notes) if notes else "",
+        "reasoning": "Local heuristic fusion",
+        "recommended_action": _recommend_action(final_state),
+        "status_flags": status_flags,
+        "signals_used": fused_context,
+    }
+
+
+def _derive_risk(final_state: str) -> str:
+    mapping = {
+        "sleeping": "safe",
+        "awake": "safe",  # Changed from "monitor" - baby awake is normal
+        "crying": "monitor",  # Monitor for crying, but not immediate alert
+        "distressed": "alert",
+        "in_unsafe_posture": "alert",
+        "missing_from_frame": "alert",
+        "adult_intrusion": "alert",
+    }
+    return mapping.get(final_state, "safe")
+
+
+def _recommend_action(final_state: str) -> str:
+    actions = {
+        "sleeping": "No action needed, continue monitoring.",
+        "awake": "Baby is awake; monitor or gently soothe if needed.",
+        "crying": "Check baby promptly and soothe.",
+        "distressed": "Immediate attention required to calm and assess safety.",
+        "in_unsafe_posture": "Adjust baby's posture to a safe sleeping position.",
+        "missing_from_frame": "Verify camera angle and baby location immediately.",
+        "adult_intrusion": "Ensure authorized caregiver is present; investigate intrusion.",
+    }
+    return actions.get(final_state, "Monitor conditions closely.")
+
+
+def _json_safe(value: Any):
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return str(value)
 
 
 async def analyze_image_file(

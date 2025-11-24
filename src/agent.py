@@ -9,6 +9,179 @@ from src.notifier import send_alert, send_risk_alert
 from src.alert_manager import get_alert_manager, AlertType
 
 
+FINAL_STATE_ALERT_MAP = {
+    "sleeping": None,  # No alert - sleeping is safe
+    "awake": None,  # No alert - awake is normal
+    "crying": AlertType.CRYING_DETECTED,  # Alert on crying
+    "distressed": AlertType.HIGH_RISK,  # Alert on distress
+    "in_unsafe_posture": AlertType.UNSAFE_POSITION,  # Alert on unsafe posture
+    "missing_from_frame": AlertType.BABY_ABSENT,  # Alert if baby missing
+    "adult_intrusion": AlertType.HIGH_RISK,  # Alert on intrusion
+}
+
+
+def _summarize_sensor_signals(fused_context: Optional[Dict[str, Any]]) -> List[str]:
+    if not fused_context:
+        return []
+
+    lines: List[str] = []
+    yolo = fused_context.get("yolo_result") or {}
+    pose = fused_context.get("pose_result") or {}
+    movement = fused_context.get("movement_result") or {}
+    emotion = fused_context.get("emotion_result") or {}
+
+    if yolo:
+        baby = "yes" if yolo.get("baby_detected") else "no"
+        adult = "yes" if yolo.get("adult_detected") else "no"
+        lines.append(
+            f"YOLO → baby:{baby} | adult:{adult} | persons:{yolo.get('person_count', 'n/a')}"
+        )
+    if pose:
+        lines.append(
+            f"Pose → {pose.get('pose_label', 'unknown')} (conf {pose.get('confidence', 0.0):.2f})"
+        )
+    if movement:
+        sudden = " + sudden jerk" if movement.get("sudden_jerk") else ""
+        lines.append(
+            f"Movement → {movement.get('movement_type', 'unknown')} "
+            f"(score {movement.get('movement_score', 0.0):.2f}){sudden}"
+        )
+    if emotion:
+        lines.append(
+            f"Emotion → {emotion.get('emotion_label', 'unknown')} "
+            f"(p={emotion.get('probability', 0.0):.2f})"
+        )
+
+    audio = fused_context.get("audio_result")
+    if audio:
+        lines.append(
+            f"Audio → crying:{audio.get('is_crying')} "
+            f"(conf {audio.get('confidence', 0.0):.2f})"
+        )
+
+    return lines
+
+
+def _compose_final_alert_message(
+    final_result: Dict[str, Any],
+    fused_context: Optional[Dict[str, Any]],
+    reason: str,
+) -> str:
+    status_flags = final_result.get("status_flags") or []
+    summary_lines = _summarize_sensor_signals(fused_context)
+
+    lines = [
+        "🍼 Baby Monitor Update",
+        "",
+        f"Final State: {final_result.get('final_state', 'unknown')}",
+        f"Risk: {final_result.get('risk', 'unknown').upper()}",
+        f"Confidence: {final_result.get('confidence', 0.0):.2f}",
+        f"Adult Intrusion: {final_result.get('adult_intrusion', False)}",
+        f"Movement Level: {final_result.get('movement_level', 'unknown')}",
+    ]
+
+    notes = final_result.get("notes")
+    if notes:
+        lines.extend(["", f"Notes: {notes}"])
+
+    if status_flags:
+        lines.append("")
+        lines.append("Status Flags:")
+        for flag in status_flags:
+            lines.append(f"  • {flag}")
+
+    if summary_lines:
+        lines.append("")
+        lines.append("Sensor Highlights:")
+        for entry in summary_lines:
+            lines.append(f"  • {entry}")
+
+    recommended = final_result.get("recommended_action")
+    if recommended:
+        lines.extend(["", f"Recommended Action: {recommended}"])
+
+    lines.extend(["", f"Reason: {reason}"])
+    return "\n".join(lines)
+
+
+def evaluate_fused_state(
+    final_result: Optional[Dict[str, Any]],
+    fused_context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluate the fused Azure Vision decision and trigger alerts if needed.
+    """
+    if not final_result:
+        return {
+            "alert": False,
+            "reason": "No final result available",
+            "notified": False,
+            "alert_type": None,
+            "message": None,
+            "alert_payload": {"sent": False},
+        }
+
+    final_state = str(final_result.get("final_state", "unknown")).lower()
+    risk = str(final_result.get("risk", "monitor")).lower()
+    alert_type = FINAL_STATE_ALERT_MAP.get(final_state)
+    should_alert = alert_type is not None
+
+    if not should_alert and risk in {"alert", "caution"}:
+        alert_type = AlertType.HIGH_RISK if risk == "alert" else AlertType.BABY_DISTRESSED
+        should_alert = True
+
+    reason = (
+        f"State {final_state} with risk {risk}"
+        if should_alert
+        else f"State {final_state} deemed safe"
+    )
+    message = _compose_final_alert_message(final_result, fused_context, reason) if should_alert else None
+
+    notified = False
+    email_ok = False
+    sms_ok = False
+    log_id = None
+    cooldown_active = False
+    cooldown_seconds = 0.0
+
+    if should_alert and alert_type:
+        alert_manager = get_alert_manager()
+        if not alert_manager.should_send_alert(alert_type):
+            cooldown_active = True
+            status = alert_manager.get_cooldown_status(alert_type)
+            cooldown_seconds = status.get("cooldown_remaining_seconds", 0.0)
+        else:
+            email_ok, sms_ok, log_id = send_alert(
+                alert_type=alert_type.value,
+                message=message or "",
+            )
+            notified = email_ok or sms_ok
+            if notified:
+                alert_manager.record_alert_sent(alert_type)
+
+    alert_payload = {
+        "sent": notified,
+        "email_success": email_ok,
+        "sms_success": sms_ok,
+        "log_id": log_id,
+        "message": message,
+        "alert_type": alert_type.value if alert_type else None,
+        "cooldown_active": cooldown_active,
+        "cooldown_seconds_remaining": cooldown_seconds,
+    }
+
+    return {
+        "alert": should_alert,
+        "reason": reason,
+        "alert_type": alert_type.value if alert_type else None,
+        "message": message,
+        "notified": notified,
+        "cooldown_active": cooldown_active,
+        "cooldown_seconds_remaining": cooldown_seconds,
+        "alert_payload": alert_payload,
+    }
+
+
 def decision_from_vision(
     vision_json: dict,
     audio_json: Optional[dict] = None
