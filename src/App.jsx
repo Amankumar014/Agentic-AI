@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TopNavigation } from './components';
+import { TopNavigation, Chatbot } from './components';
 import Dashboard from './pages/Dashboard';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
@@ -64,6 +64,9 @@ function App() {
       <div className="flex-1 overflow-auto bg-gradient-to-br from-slate-50 via-white to-primary-50">
         {renderCurrentPage()}
       </div>
+      
+      {/* Chatbot - Available on all pages */}
+      <Chatbot />
     </div>
   );
 }
