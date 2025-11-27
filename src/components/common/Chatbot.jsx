@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { askChatbot, getChatbotStatus, formatErrorMessage } from '../../services/ApiService';
 
 /**
  * Chatbot Component - AI-powered baby care assistant
@@ -9,13 +10,15 @@ function Chatbot() {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Hi! I'm BabyBot 👶 How can I help you today?",
+      text: "Hi! I'm Lalla Care Assistant 👶 How can I help you today?",
       sender: 'bot',
       timestamp: new Date()
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [chatbotReady, setChatbotReady] = useState(true);
+  const [statusMessage, setStatusMessage] = useState('');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -24,12 +27,33 @@ function Chatbot() {
     scrollToBottom();
   }, [messages]);
 
-  // Focus input when chat opens
+  // Focus input when chat opens and check chatbot status
   useEffect(() => {
-    if (isOpen && inputRef.current) {
+    if (isOpen) {
+      if (inputRef.current) {
       inputRef.current.focus();
+      }
+      checkChatbotStatus();
     }
   }, [isOpen]);
+
+  // Check if chatbot is ready
+  const checkChatbotStatus = async () => {
+    try {
+      const status = await getChatbotStatus();
+      if (status.status === 'ready' && status.index_exists) {
+        setChatbotReady(true);
+        setStatusMessage('');
+      } else {
+        setChatbotReady(false);
+        setStatusMessage(status.message || 'Chatbot is initializing. Please try again later.');
+      }
+    } catch (error) {
+      console.error('Error checking chatbot status:', error);
+      setChatbotReady(false);
+      setStatusMessage('Unable to connect to chatbot service.');
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,15 +63,30 @@ function Chatbot() {
     setIsOpen(!isOpen);
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     
     if (!inputMessage.trim()) return;
+    if (!chatbotReady) return;
+
+    const questionText = inputMessage.trim();
+
+    // Validate question length
+    if (questionText.length > 500) {
+      const errorMessage = {
+        id: Date.now(),
+        text: "❌ Question is too long. Please keep it under 500 characters.",
+        sender: 'bot',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      return;
+    }
 
     // Add user message
     const userMessage = {
       id: Date.now(),
-      text: inputMessage,
+      text: questionText,
       sender: 'user',
       timestamp: new Date()
     };
@@ -56,62 +95,48 @@ function Chatbot() {
     setInputMessage('');
     setIsTyping(true);
 
-    // Simulate bot response
-    setTimeout(() => {
-      const botResponse = generateBotResponse(inputMessage);
+    // Call backend API
+    try {
+      const response = await askChatbot(questionText);
+      
+      // Format bot response with sources if available
+      let botText = response.answer;
+      
+      if (response.sources && response.sources.length > 0) {
+        botText += '\n\n📚 Sources: ';
+        const sourceTexts = response.sources.slice(0, 3).map(source => {
+          if (source.document_name && source.page) {
+            return `${source.document_name} (p.${source.page})`;
+          }
+          return source.document_name || 'Document';
+        });
+        botText += sourceTexts.join(', ');
+      }
+
       const botMessage = {
         id: Date.now() + 1,
-        text: botResponse,
+        text: botText,
+        sender: 'bot',
+        timestamp: new Date(),
+        sources: response.sources,
+        chunks_found: response.chunks_found
+      };
+      
+      setMessages(prev => [...prev, botMessage]);
+    } catch (error) {
+      console.error('Error asking chatbot:', error);
+      const errorMessage = {
+        id: Date.now() + 1,
+        text: `❌ ${formatErrorMessage(error)}`,
         sender: 'bot',
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, botMessage]);
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 1000);
+    }
   };
 
-  const generateBotResponse = (userInput) => {
-    const input = userInput.toLowerCase();
-
-    // Baby care responses
-    if (input.includes('sleep') || input.includes('nap')) {
-      return "💤 For healthy sleep, babies need 14-17 hours of sleep per day. Make sure the room is dark, quiet, and at a comfortable temperature (68-72°F). Establish a consistent bedtime routine!";
-    }
-    if (input.includes('cry') || input.includes('crying')) {
-      return "😢 Crying is baby's way of communicating! Common causes include: hunger, dirty diaper, tiredness, discomfort, or need for attention. Check these basics first. If crying persists or sounds unusual, consult your pediatrician.";
-    }
-    if (input.includes('feed') || input.includes('hungry') || input.includes('eating')) {
-      return "🍼 Newborns typically eat every 2-3 hours. Look for hunger cues like rooting, sucking on hands, or fussiness. Feed on demand and watch for signs of fullness like turning away or falling asleep.";
-    }
-    if (input.includes('temperature') || input.includes('fever')) {
-      return "🌡️ Normal baby temperature is 97°F - 100.4°F. A fever is 100.4°F or higher. For fever management, keep baby hydrated, dress lightly, and contact your doctor if fever persists or baby is under 3 months.";
-    }
-    if (input.includes('diaper') || input.includes('change')) {
-      return "🧷 Newborns need diaper changes every 2-3 hours, or whenever soiled. Look for redness or rash. Clean gently from front to back, and apply barrier cream if needed.";
-    }
-    if (input.includes('bath') || input.includes('wash')) {
-      return "🛁 Bathe baby 2-3 times per week. Use lukewarm water, support head and neck, and never leave baby unattended. Keep room warm and have towel ready.";
-    }
-    if (input.includes('help') || input.includes('menu') || input.includes('options')) {
-      return "I can help with: Sleep tips 💤, Crying advice 😢, Feeding guidance 🍼, Temperature checks 🌡️, Diaper changes 🧷, Bath time 🛁, and general baby care questions! Just ask me anything.";
-    }
-    if (input.includes('hi') || input.includes('hello') || input.includes('hey')) {
-      return "Hello! 👋 I'm here to help with all your baby care questions. What would you like to know about?";
-    }
-    if (input.includes('thank') || input.includes('thanks')) {
-      return "You're very welcome! 💕 Feel free to ask me anything else. I'm always here to help!";
-    }
-
-    // Default responses
-    const defaultResponses = [
-      "That's a great question! For specific concerns, I recommend consulting with your pediatrician. In the meantime, I can provide general baby care tips. Try asking about sleep, feeding, or crying.",
-      "I'm here to help! 👶 You can ask me about baby sleep schedules, feeding times, crying causes, temperature monitoring, and more.",
-      "Interesting question! While I provide general guidance, every baby is unique. Ask me about specific topics like sleep, feeding, or development milestones!",
-      "I'd love to help with that! Type 'help' to see what topics I can assist with, or ask me anything about baby care."
-    ];
-
-    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
-  };
 
   const quickQuestions = [
     { id: 1, text: "Sleep tips", icon: "😴" },
@@ -121,6 +146,7 @@ function Chatbot() {
   ];
 
   const handleQuickQuestion = (question) => {
+    if (!chatbotReady) return;
     setInputMessage(question);
     // Trigger send after a brief delay
     setTimeout(() => {
@@ -145,8 +171,10 @@ function Chatbot() {
               👶
             </div>
             <div>
-              <h3 className="font-bold text-lg">BabyBot Assistant</h3>
-              <p className="text-xs text-primary-100">Always here to help</p>
+              <h3 className="font-bold text-lg">Lalla Care Assistant</h3>
+              <p className="text-xs text-primary-100">
+                {chatbotReady ? 'Always here to help' : 'Initializing...'}
+              </p>
             </div>
           </div>
           <button
@@ -156,6 +184,15 @@ function Chatbot() {
             <span className="text-xl">×</span>
           </button>
         </div>
+
+        {/* Status Message */}
+        {!chatbotReady && statusMessage && (
+          <div className="px-5 pt-4 pb-2">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800">
+              ⚠️ {statusMessage}
+            </div>
+          </div>
+        )}
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4" style={{ height: 'calc(80vh - 220px)' }}>
@@ -231,12 +268,13 @@ function Chatbot() {
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Type your question..."
-              className="flex-1 px-4 py-3 rounded-2xl bg-slate-100 text-slate-800 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+              placeholder={chatbotReady ? "Type your question..." : "Chatbot is initializing..."}
+              disabled={!chatbotReady}
+              className="flex-1 px-4 py-3 rounded-2xl bg-slate-100 text-slate-800 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
-              disabled={!inputMessage.trim()}
+              disabled={!inputMessage.trim() || !chatbotReady}
               className="w-12 h-12 rounded-2xl bg-primary-500 text-white hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center shadow-lg"
             >
               <svg
@@ -296,7 +334,7 @@ function Chatbot() {
           
           {/* Tooltip */}
           <div className="absolute bottom-full right-0 mb-3 px-4 py-2 bg-slate-800 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap shadow-xl transform group-hover:translate-y-0 translate-y-2">
-            <div className="font-semibold">{isOpen ? 'Close Chat' : '👋 Chat with BabyBot'}</div>
+            <div className="font-semibold">{isOpen ? 'Close Chat' : '👋 Chat with Lalla Care'}</div>
             {!isOpen && <div className="text-slate-300 text-[10px] mt-0.5">I'm here to help!</div>}
             {/* Tooltip arrow */}
             <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-slate-800"></div>

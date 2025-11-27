@@ -7,6 +7,7 @@ import {
   ActivityItem
 } from '../components';
 import wsService from '../services/WebSocketService';
+import { getStats, getAlerts } from '../services/ApiService';
 
 /**
  * Dashboard Page - Main monitoring dashboard with real-time updates
@@ -21,8 +22,10 @@ function Dashboard({ config }) {
   });
 
   const [recentAlerts, setRecentAlerts] = useState([]);
+  const [statsData, setStatsData] = useState(null);
+  const [statsError, setStatsError] = useState(null);
 
-  const [dailySummary] = useState({
+  const [dailySummary, setDailySummary] = useState({
     sleepHours: { value: '8.5h', change: 12 },
     wakePeriods: { value: '6', change: -8 },
     cryingTime: { value: '45m', change: -15 },
@@ -66,6 +69,65 @@ function Dashboard({ config }) {
       duration: '6h ago'
     }
   ]);
+
+  // Load initial stats and alerts from API
+  useEffect(() => {
+    loadStatsAndAlerts();
+    // Refresh stats every 30 seconds
+    const interval = setInterval(loadStatsAndAlerts, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadStatsAndAlerts = async () => {
+    // Load stats
+    try {
+      const stats = await getStats();
+      if (stats.status === 'success') {
+        setStatsData(stats.stats);
+        setStatsError(null);
+        
+        // Update daily summary with real data
+        setDailySummary({
+          sleepHours: { 
+            value: stats.stats.frames_last_24h || 0, 
+            change: 12 
+          },
+          wakePeriods: { 
+            value: stats.stats.baby_detected_count || 0, 
+            change: -8 
+          },
+          cryingTime: { 
+            value: stats.stats.alerts_last_24h || 0, 
+            change: -15 
+          },
+          adultVisits: { 
+            value: stats.stats.total_frames_analyzed || 0, 
+            change: 5 
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error);
+      setStatsError(error);
+    }
+
+    // Load recent alerts
+    try {
+      const alertsData = await getAlerts(5);
+      if (alertsData.status === 'success' && alertsData.alerts) {
+        const formattedAlerts = alertsData.alerts.map(alert => ({
+          id: alert.id,
+          message: alert.message,
+          severity: alert.alert_type === 'high_risk_position' ? 'critical' : 'warning',
+          timestamp: new Date(alert.timestamp).toLocaleTimeString(),
+          delivered: alert.delivered
+        }));
+        setRecentAlerts(formattedAlerts);
+      }
+    } catch (error) {
+      console.error('Error loading alerts:', error);
+    }
+  };
 
   useEffect(() => {
     const handleStatusUpdate = (data) => {
@@ -148,39 +210,68 @@ function Dashboard({ config }) {
 
           {/* Daily Summary */}
           <div className="bg-white rounded-2xl p-6 shadow-soft">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4 uppercase tracking-wide">
-              DAILY SUMMARY
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+                SYSTEM STATISTICS
+              </h3>
+              {statsError && (
+                <span className="text-xs text-red-500">⚠️ Error loading stats</span>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <DailySummaryCard
-                title="Sleep"
-                value={dailySummary.sleepHours.value}
+                title="Frames (24h)"
+                value={statsData?.frames_last_24h?.toString() || '0'}
                 change={dailySummary.sleepHours.change}
-                icon="😴"
+                icon="📸"
                 variant="primary"
               />
               <DailySummaryCard
-                title="Feed"
-                value={dailySummary.wakePeriods.value}
+                title="Baby Detected"
+                value={statsData?.baby_detected_count?.toString() || '0'}
                 change={dailySummary.wakePeriods.change}
-                icon="🍼"
+                icon="👶"
                 variant="secondary"
               />
               <DailySummaryCard
-                title="Diaper"
-                value={dailySummary.cryingTime.value}
+                title="Alerts (24h)"
+                value={statsData?.alerts_last_24h?.toString() || '0'}
                 change={dailySummary.cryingTime.change}
-                icon="👶"
+                icon="🔔"
                 variant="warning"
               />
               <DailySummaryCard
-                title="Total Sleep"
-                value={dailySummary.adultVisits.value}
+                title="Total Analyzed"
+                value={statsData?.total_frames_analyzed?.toString() || '0'}
                 change={dailySummary.adultVisits.change}
-                icon="💤"
+                icon="📊"
                 variant="accent"
               />
             </div>
+            
+            {/* Risk Level Distribution */}
+            {statsData && statsData.risk_level_distribution && (
+              <div className="mt-4 p-4 bg-slate-50 rounded-xl">
+                <h4 className="text-xs font-semibold text-slate-600 mb-3 uppercase tracking-wide">
+                  Risk Level Distribution
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Object.entries(statsData.risk_level_distribution).map(([level, count]) => (
+                    <div key={level} className="text-center">
+                      <div className={`text-2xl font-bold ${
+                        level === 'high' ? 'text-red-600' :
+                        level === 'medium' ? 'text-yellow-600' :
+                        level === 'low' ? 'text-green-600' :
+                        'text-slate-600'
+                      }`}>
+                        {count}
+                      </div>
+                      <div className="text-xs text-slate-500 capitalize mt-1">{level}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Control Buttons */}

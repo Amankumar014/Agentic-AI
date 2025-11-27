@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import wsService from '../services/WebSocketService';
+import { rebuildChatbotIndex, formatErrorMessage } from '../services/ApiService';
 
 /**
  * Settings Page - System configuration and monitoring controls
@@ -15,6 +16,12 @@ function Settings() {
   });
 
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [rebuildState, setRebuildState] = useState({
+    rebuilding: false,
+    result: null,
+    error: null
+  });
+  const [showAdminSection, setShowAdminSection] = useState(false);
 
   const handleInputChange = (field, value) => {
     setSettings((prev) => ({
@@ -56,6 +63,34 @@ function Settings() {
     // Simulate API call
     console.log('Saving settings:', settings);
     showSuccessNotification('Settings saved successfully!');
+  };
+
+  const handleRebuildChatbotIndex = async () => {
+    if (!window.confirm('Are you sure you want to rebuild the chatbot index? This may take a few minutes.')) {
+      return;
+    }
+
+    setRebuildState({ rebuilding: true, result: null, error: null });
+
+    try {
+      const result = await rebuildChatbotIndex();
+      
+      if (result.status === 'success') {
+        setRebuildState({ 
+          rebuilding: false, 
+          result: result, 
+          error: null 
+        });
+        showSuccessNotification('Chatbot index rebuilt successfully!');
+      }
+    } catch (error) {
+      console.error('Error rebuilding chatbot index:', error);
+      setRebuildState({ 
+        rebuilding: false, 
+        result: null, 
+        error: formatErrorMessage(error) 
+      });
+    }
   };
 
   return (
@@ -208,6 +243,101 @@ function Settings() {
             💾 Save Settings
           </button>
         </div>
+      </div>
+
+      {/* Admin Section */}
+      <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-6 shadow-soft border-2 border-purple-200 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center text-xl">
+              🔐
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">
+                Admin Settings
+              </h3>
+              <p className="text-xs text-slate-600">Advanced features for administrators</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAdminSection(!showAdminSection)}
+            className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-semibold hover:bg-purple-600 transition-colors"
+          >
+            {showAdminSection ? '🔼 Hide' : '🔽 Show'}
+          </button>
+        </div>
+
+        {showAdminSection && (
+          <div className="mt-4 space-y-4">
+            {/* Chatbot Index Rebuild */}
+            <div className="bg-white rounded-xl p-5 border border-purple-200">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-1">
+                    🤖 Rebuild Chatbot Index
+                  </h4>
+                  <p className="text-xs text-slate-600 mb-3">
+                    Rebuilds the RAG knowledge base index from documents. Use this after updating or adding new documents.
+                  </p>
+
+                  {rebuildState.error && (
+                    <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                      ❌ {rebuildState.error}
+                    </div>
+                  )}
+
+                  {rebuildState.result && (
+                    <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                      <p className="font-semibold mb-2">✅ Index rebuilt successfully!</p>
+                      <div className="space-y-1">
+                        <p>• Documents: {rebuildState.result.num_documents}</p>
+                        <p>• Pages: {rebuildState.result.num_pages}</p>
+                        <p>• Chunks: {rebuildState.result.num_chunks}</p>
+                        <p>• Embedding Dimension: {rebuildState.result.embedding_dimension}</p>
+                        <p>• Build Time: {rebuildState.result.build_time_seconds?.toFixed(2)}s</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={handleRebuildChatbotIndex}
+                disabled={rebuildState.rebuilding}
+                className="w-full px-4 py-3 bg-purple-500 text-white rounded-lg font-semibold hover:bg-purple-600 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+              >
+                {rebuildState.rebuilding ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>⏳ Rebuilding Index...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🔨 Rebuild Chatbot Index</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* API Configuration Info */}
+            <div className="bg-white rounded-xl p-5 border border-purple-200">
+              <h4 className="text-sm font-semibold text-slate-800 mb-2">
+                🌐 Backend Configuration
+              </h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                  <span className="text-slate-600">API Base URL:</span>
+                  <code className="font-mono text-purple-600 bg-purple-50 px-2 py-1 rounded">
+                    {process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000'}
+                  </code>
+                </div>
+                <p className="text-slate-500 italic mt-2">
+                  To change the backend URL, update REACT_APP_API_BASE_URL in your .env file and restart the application.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

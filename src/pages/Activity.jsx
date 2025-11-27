@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ActivityItem } from '../components';
 import wsService from '../services/WebSocketService';
+import { getLogs, formatErrorMessage } from '../services/ApiService';
 
 /**
  * Activity Page - Detailed activity logs and history
@@ -8,6 +9,11 @@ import wsService from '../services/WebSocketService';
 function Activity() {
   const [filter, setFilter] = useState('all'); // all, sleep, wake, cry, feed, adult
   const [selectedDate, setSelectedDate] = useState('today'); // today, week, month
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [limit, setLimit] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const [logs, setLogs] = useState([]);
   const [activities, setActivities] = useState([
     {
       id: 1,
@@ -128,6 +134,109 @@ function Activity() {
     adult: 0
   });
 
+  // Load logs from API
+  useEffect(() => {
+    loadLogs();
+  }, [limit]);
+
+  const loadLogs = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await getLogs(limit);
+      
+      if (response.status === 'success') {
+        setLogs(response.logs);
+        setTotalCount(response.count);
+        
+        // Convert logs to activities format
+        const convertedActivities = response.logs.map(log => ({
+          id: log.id,
+          type: determineActivityType(log),
+          description: generateDescription(log),
+          time: new Date(log.timestamp).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          date: formatDate(log.timestamp),
+          duration: log.movement_level || 'N/A',
+          details: generateDetails(log),
+          rawLog: log
+        }));
+        
+        // Merge with existing manual activities
+        setActivities([...convertedActivities, ...activities.slice(0, 12)]);
+      }
+    } catch (err) {
+      console.error('Error loading logs:', err);
+      setError(formatErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const determineActivityType = (log) => {
+    if (!log.baby_detected) return 'adult';
+    
+    switch (log.risk) {
+      case 'high':
+        return 'cry';
+      case 'medium':
+        return 'wake';
+      case 'low':
+        return 'sleep';
+      default:
+        return 'wake';
+    }
+  };
+
+  const generateDescription = (log) => {
+    if (!log.baby_detected) {
+      return 'No baby detected in frame';
+    }
+    
+    const position = log.position || 'unknown position';
+    const risk = log.risk || 'unknown';
+    
+    if (risk === 'high') {
+      return `Alert: Baby in ${position} - High risk detected`;
+    } else if (risk === 'medium') {
+      return `Baby detected in ${position} - Medium risk`;
+    } else {
+      return `Baby resting in ${position} - Low risk`;
+    }
+  };
+
+  const generateDetails = (log) => {
+    const details = [];
+    
+    if (log.baby_detected !== undefined) {
+      details.push(`Baby Detected: ${log.baby_detected ? 'Yes' : 'No'}`);
+    }
+    if (log.position) {
+      details.push(`Position: ${log.position}`);
+    }
+    if (log.movement_level) {
+      details.push(`Movement: ${log.movement_level}`);
+    }
+    if (log.risk) {
+      details.push(`Risk Level: ${log.risk}`);
+    }
+    
+    return details.join(', ');
+  };
+
+  const formatDate = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
   useEffect(() => {
     // Calculate stats
     const stats = {
@@ -183,27 +292,65 @@ function Activity() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Activity Logs</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Complete history of all baby monitoring activities
+            Complete history of all baby monitoring activities {totalCount > 0 && `(${totalCount} logs)`}
           </p>
         </div>
 
-        {/* Date Selector */}
-        <div className="flex items-center space-x-2 bg-white rounded-xl p-1 shadow-soft">
-          {['today', 'week', 'month'].map((period) => (
-            <button
-              key={period}
-              onClick={() => setSelectedDate(period)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${
-                selectedDate === period
-                  ? 'bg-primary-500 text-white'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {period}
-            </button>
-          ))}
+        {/* Controls */}
+        <div className="flex items-center space-x-3">
+          {/* Limit Selector */}
+          <select
+            value={limit}
+            onChange={(e) => setLimit(parseInt(e.target.value))}
+            className="px-4 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-sm hover:border-slate-400 transition-all"
+          >
+            <option value={10}>Last 10</option>
+            <option value={50}>Last 50</option>
+            <option value={100}>Last 100</option>
+            <option value={200}>Last 200</option>
+          </select>
+
+          {/* Date Selector */}
+          <div className="flex items-center space-x-2 bg-white rounded-xl p-1 shadow-soft">
+            {['today', 'week', 'month'].map((period) => (
+              <button
+                key={period}
+                onClick={() => setSelectedDate(period)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all capitalize ${
+                  selectedDate === period
+                    ? 'bg-primary-500 text-white'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {period}
+              </button>
+            ))}
+          </div>
+
+          {/* Refresh Button */}
+          <button
+            onClick={loadLogs}
+            disabled={loading}
+            className="px-6 py-2 bg-primary-500 text-white rounded-xl font-semibold hover:bg-primary-600 transition-all shadow-soft hover:shadow-soft-lg disabled:bg-slate-300 disabled:cursor-not-allowed"
+          >
+            {loading ? '⏳' : '🔄'}
+          </button>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+          <p className="font-semibold">❌ Error loading logs</p>
+          <p className="text-sm mt-1">{error}</p>
+          <button 
+            onClick={loadLogs}
+            className="mt-2 text-sm underline hover:no-underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Activity Statistics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -244,14 +391,20 @@ function Activity() {
         </div>
 
         {/* Timeline */}
-        <div className="relative">
-          {/* Timeline Line */}
-          <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-slate-200"></div>
+        {loading ? (
+          <div className="text-center py-16">
+            <div className="w-16 h-16 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-600 font-semibold">Loading activity logs...</p>
+          </div>
+        ) : (
+          <div className="relative">
+            {/* Timeline Line */}
+            <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-slate-200"></div>
 
-          {/* Activities */}
-          <div className="space-y-4">
-            {filteredActivities.length > 0 ? (
-              filteredActivities.map((activity, index) => (
+            {/* Activities */}
+            <div className="space-y-4">
+              {filteredActivities.length > 0 ? (
+                filteredActivities.map((activity, index) => (
                 <div key={activity.id} className="relative flex items-start space-x-4">
                   {/* Timeline Dot */}
                   <div className="relative z-10 flex-shrink-0">
@@ -284,6 +437,17 @@ function Activity() {
                             {activity.details}
                           </p>
                         )}
+                        {/* Expand raw log data */}
+                        {activity.rawLog && (
+                          <details className="mt-2">
+                            <summary className="text-xs text-primary-600 cursor-pointer hover:underline">
+                              View raw data
+                            </summary>
+                            <pre className="mt-2 text-xs bg-slate-50 p-3 rounded-lg overflow-auto max-h-40">
+                              {JSON.stringify(activity.rawLog, null, 2)}
+                            </pre>
+                          </details>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -300,8 +464,9 @@ function Activity() {
                 </p>
               </div>
             )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Activity Summary */}
