@@ -7,7 +7,7 @@ import {
   ActivityItem
 } from '../components';
 import wsService from '../services/WebSocketService';
-import { getStats, getAlerts } from '../services/ApiService';
+import { getStats, getAlerts, getStreamUrl } from '../services/ApiService';
 
 /**
  * Dashboard Page - Main monitoring dashboard with real-time updates
@@ -204,7 +204,7 @@ function Dashboard({ config }) {
         <div className="lg:col-span-2 space-y-6">
           {/* Video Feed */}
           <VideoFeed
-            cameraUrl=""
+            cameraUrl={getStreamUrl()}
             label={config.camera_label || 'Nursery Camera'}
           />
 

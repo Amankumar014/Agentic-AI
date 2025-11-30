@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VideoFeed, StatusCard } from '../components';
 import wsService from '../services/WebSocketService';
-import { uploadFrame, uploadFrameWithAudio, formatErrorMessage } from '../services/ApiService';
+import { uploadFrame, uploadFrameWithAudio, formatErrorMessage, getStreamUrl } from '../services/ApiService';
 
 /**
  * LiveFeed Page - Dedicated live camera feed monitoring
@@ -227,7 +227,7 @@ function LiveFeed({ config }) {
           {/* Enhanced Video Feed */}
           <div className="bg-white rounded-2xl overflow-hidden shadow-soft">
             <VideoFeed
-              cameraUrl=""
+              cameraUrl={getStreamUrl()}
               label={config?.camera_label || 'Nursery Camera'}
             />
             

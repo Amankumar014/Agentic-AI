@@ -274,6 +274,21 @@ export function getBaseUrl() {
   return BASE_URL;
 }
 
+/**
+ * ============================================
+ * 5. VIDEO STREAMING
+ * ============================================
+ */
+
+/**
+ * Get MJPEG stream URL
+ * The stream endpoint provides Motion JPEG video that can be displayed in an <img> tag
+ * @returns {string} - Full URL to the MJPEG stream endpoint
+ */
+export function getStreamUrl() {
+  return `${BASE_URL}/api/v1/stream/`;
+}
+
 // Export all functions as default object as well
 const ApiService = {
   checkHealth,
@@ -288,6 +303,7 @@ const ApiService = {
   formatErrorMessage,
   isFileSizeError,
   getBaseUrl,
+  getStreamUrl,
 };
 
 export default ApiService;
