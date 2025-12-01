@@ -14,8 +14,9 @@ openai
 langchain
 transformers
 torch
-opencv-python-headless
+opencv-python-headless==4.10.0.84
 mediapipe
+protobuf<5,>=4.25.3
 librosa
 sounddevice
 scipy
@@ -24,7 +25,23 @@ scikit-learn
 joblib
 twilio
 ultralytics
-tensorflow
+
+numpy==1.26.4
+ml-dtypes==0.3.2
+
 pytest
 python-multipart
 pytest-asyncio
+
+# Chatbot RAG dependencies
+sentence-transformers
+faiss-cpu
+pypdf
+langchain
+langchain-community
+langchain-core
+langchain-openai
+langchain-huggingface
+langchain-text-splitters
+langgraph-checkpoint-sqlite
+huggingface_hub

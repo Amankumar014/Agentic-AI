@@ -7,8 +7,10 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException
-from fastapi.responses import JSONResponse
+from starlette.requests import Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlmodel import select
+import asyncio
 
 from src.config import get_settings
 from src.models import get_session, FrameAnalysisLog, AlertLog
@@ -309,6 +311,94 @@ async def health_check():
     }
 
 
+@router.get("/stream/")
+async def stream_video(request: Request):
+    """
+    Stream live video feed in MJPEG format compatible with HTML <img> tags.
+    
+    This endpoint provides a continuous MJPEG stream that can be displayed
+    directly in an HTML image element:
+        <img src="http://localhost:8000/api/v1/stream/" />
+    
+    Features:
+        - No authentication required
+        - Thread-safe for multiple concurrent viewers
+        - Efficient JPEG encoding with configurable quality
+        - Automatic frame rate control
+        - Handles client disconnections gracefully
+    
+    Returns:
+        StreamingResponse: MJPEG video stream with multipart/x-mixed-replace content type
+    """
+    from src.camera_streamer import get_camera_streamer
+    
+    # Get the camera streamer instance
+    streamer = get_camera_streamer()
+    
+    # Register this viewer
+    streamer.add_viewer()
+    
+    # Wait a moment for camera to initialize if needed
+    await asyncio.sleep(0.1)
+    
+    # Define boundary (must match the one in media_type)
+    boundary = "----video-boundary"
+    boundary_bytes = boundary.encode()
+    
+    async def generate_frames():
+        """Generate MJPEG frames continuously."""
+        settings = get_settings()
+        frame_delay = 1.0 / settings.STREAM_FPS if settings.STREAM_FPS > 0 else 0.1
+        
+        try:
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                # Get latest frame
+                frame_bytes = streamer.get_frame()
+                
+                if frame_bytes is None:
+                    # No frame available yet, wait and retry
+                    await asyncio.sleep(0.1)
+                    continue
+                
+                # Send frame in MJPEG format (multipart/x-mixed-replace)
+                frame_data = (
+                    b"--" + boundary_bytes + b"\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame_bytes)).encode() + b"\r\n\r\n"
+                    + frame_bytes
+                    + b"\r\n"
+                )
+                
+                yield frame_data
+                
+                # Control frame rate
+                await asyncio.sleep(frame_delay)
+        
+        except asyncio.CancelledError:
+            # Client disconnected
+            pass
+        except Exception as e:
+            print(f"Error in video stream: {e}")
+        finally:
+            # Unregister this viewer
+            streamer.remove_viewer()
+    
+    return StreamingResponse(
+        generate_frames(),
+        media_type=f"multipart/x-mixed-replace; boundary={boundary}",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Connection": "keep-alive",
+        }
+    )
+
+
 @router.get("/stats/")
 async def get_stats():
     """
@@ -382,3 +472,390 @@ def configure_cors(app):
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+# ==============================================================================
+# CHATBOT RAG ENDPOINTS
+# ==============================================================================
+
+@router.post("/chatbot/ask")
+async def chatbot_ask(request: dict):
+    """
+    Ask the Lalla Care chatbot a question using LangGraph RAG workflow.
+    
+    The chatbot uses LangGraph with conditional edges to intelligently route questions:
+    - Questions about Lalla Care → RAG retrieval from documentation
+    - Out-of-scope questions → General LLM response
+    
+    This endpoint now uses the advanced LangGraph implementation with conversation history.
+    
+    Args:
+        request: JSON with 'question' and optional 'thread_id' fields
+        
+    Request Body:
+        {
+            "question": "How do I connect my camera?",
+            "thread_id": "user-123"  // optional
+        }
+    
+    Returns:
+        JSON response with answer and metadata
+        
+    Response Body:
+        {
+            "answer": "To connect your camera...",
+            "question": "How do I connect my camera?",
+            "routing": "rag",
+            "thread_id": "user-123",
+            "has_context": true,
+            "processing_time_seconds": 1.23,
+            "timestamp": "2024-01-01T12:00:00"
+        }
+    """
+    try:
+        from src.langgraph_rag_chatbot import ask_chatbot_langgraph
+        
+        # Validate request
+        if not request or "question" not in request:
+            raise HTTPException(
+                status_code=400, 
+                detail="Request must include 'question' field"
+            )
+        
+        question = request.get("question", "").strip()
+        thread_id = request.get("thread_id")
+        
+        if not question:
+            raise HTTPException(
+                status_code=400,
+                detail="Question cannot be empty"
+            )
+        
+        if len(question) > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail="Question too long (max 1000 characters)"
+            )
+        
+        # Log incoming question
+        print(f"\n💬 Chatbot Question: {question}")
+        if thread_id:
+            print(f"   Thread ID: {thread_id}")
+        
+        # Process question through LangGraph RAG pipeline
+        result = await ask_chatbot_langgraph(question, thread_id)
+        
+        # Log answer
+        print(f"✅ Chatbot Answer ({result.get('routing', 'unknown')}): {result.get('answer', '')[:100]}...")
+        
+        return JSONResponse(content=result)
+    
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        print(f"❌ Error in chatbot endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chatbot error: {str(e)}"
+        )
+
+
+@router.post("/chatbot/rebuild_index")
+async def chatbot_rebuild_index():
+    """
+    Rebuild the RAG index from scratch using LangGraph implementation.
+    
+    This endpoint will:
+    1. Re-read the Lalla Care PDF from rag_document/ folder
+    2. Split document into chunks with metadata
+    3. Generate embeddings using HuggingFace model
+    4. Build FAISS vector store index
+    5. Save index to disk
+    
+    Use this endpoint when:
+    - The PDF document has been updated
+    - Index is corrupted or missing
+    - You want to refresh the index
+    
+    Returns:
+        JSON with rebuild statistics and status
+        
+    Response Body:
+        {
+            "status": "success",
+            "build_time_seconds": 5.23,
+            "timestamp": "2024-01-01T12:00:00"
+        }
+    """
+    try:
+        from src.langgraph_rag_chatbot import rebuild_index_langgraph
+        
+        print("\n🔄 Rebuilding LangGraph RAG index...")
+        
+        # Run rebuild in blocking mode
+        stats = await run_blocking(rebuild_index_langgraph)
+        
+        print(f"✅ LangGraph index rebuilt successfully")
+        
+        return JSONResponse(content=stats)
+    
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {e}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"PDF document not found: {str(e)}"
+        )
+    
+    except Exception as e:
+        print(f"❌ Error rebuilding index: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to rebuild index: {str(e)}"
+        )
+
+
+@router.get("/chatbot/status")
+async def chatbot_status():
+    """
+    Get the status of the LangGraph RAG chatbot system.
+    
+    Returns information about whether the index is built and ready to use.
+    
+    Returns:
+        JSON with status information
+        
+    Response Body (when ready):
+        {
+            "status": "ready",
+            "pdf_exists": true,
+            "pdf_path": "...",
+            "index_exists": true,
+            "index_path": "...",
+            "database_path": "...",
+            "threads_count": 5
+        }
+        
+    Response Body (when not ready):
+        {
+            "status": "not_ready",
+            "pdf_exists": false,
+            "index_exists": false
+        }
+    """
+    try:
+        from src.langgraph_rag_chatbot import check_status_langgraph
+        
+        status = check_status_langgraph()
+        
+        return JSONResponse(content=status)
+    
+    except Exception as e:
+        print(f"❌ Error checking chatbot status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to check status: {str(e)}"
+        )
+
+
+# ==============================================================================
+# LANGGRAPH RAG CHATBOT ENDPOINTS
+# ==============================================================================
+
+@router.post("/chatbot/langgraph/ask")
+async def chatbot_langgraph_ask(request: dict):
+    """
+    Ask the LangGraph-based RAG chatbot a question.
+    
+    This chatbot uses LangGraph with conditional edges to route questions:
+    - Questions about Lalla Care -> RAG retrieval from documentation
+    - Out-of-scope questions -> General LLM response
+    
+    Args:
+        request: JSON with 'question' and optional 'thread_id' fields
+        
+    Request Body:
+        {
+            "question": "How do I set up the camera?",
+            "thread_id": "user-123"  // optional, for conversation history
+        }
+    
+    Returns:
+        JSON response with answer and metadata
+        
+    Response Body:
+        {
+            "answer": "To set up the camera...",
+            "question": "How do I set up the camera?",
+            "routing": "rag",  // or "general"
+            "thread_id": "user-123",
+            "has_context": true,
+            "processing_time_seconds": 1.23,
+            "timestamp": "2024-01-01T12:00:00"
+        }
+    """
+    try:
+        from src.langgraph_rag_chatbot import ask_chatbot_langgraph
+        
+        # Validate request
+        if not request or "question" not in request:
+            raise HTTPException(
+                status_code=400, 
+                detail="Request must include 'question' field"
+            )
+        
+        question = request.get("question", "").strip()
+        thread_id = request.get("thread_id")
+        
+        if not question:
+            raise HTTPException(
+                status_code=400,
+                detail="Question cannot be empty"
+            )
+        
+        if len(question) > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail="Question too long (max 1000 characters)"
+            )
+        
+        # Log incoming question
+        print(f"\n💬 LangGraph Chatbot Question: {question}")
+        if thread_id:
+            print(f"   Thread ID: {thread_id}")
+        
+        # Process question through LangGraph RAG pipeline
+        result = await ask_chatbot_langgraph(question, thread_id)
+        
+        # Log answer
+        print(f"✅ LangGraph Answer ({result.get('routing', 'unknown')}): {result.get('answer', '')[:100]}...")
+        
+        return JSONResponse(content=result)
+    
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        print(f"❌ Error in LangGraph chatbot endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"LangGraph chatbot error: {str(e)}"
+        )
+
+
+@router.post("/chatbot/langgraph/rebuild_index")
+async def chatbot_langgraph_rebuild():
+    """
+    Rebuild the FAISS index for the LangGraph chatbot.
+    
+    This will re-process the Lalla Care PDF and create a new vector store.
+    
+    Returns:
+        JSON with rebuild statistics
+        
+    Response Body:
+        {
+            "status": "success",
+            "build_time_seconds": 5.23,
+            "timestamp": "2024-01-01T12:00:00"
+        }
+    """
+    try:
+        from src.langgraph_rag_chatbot import rebuild_index_langgraph
+        
+        print("\n🔄 Rebuilding LangGraph RAG index...")
+        
+        # Run rebuild
+        stats = await run_blocking(rebuild_index_langgraph)
+        
+        print(f"✅ LangGraph index rebuilt successfully")
+        
+        return JSONResponse(content=stats)
+    
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {e}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"PDF document not found: {str(e)}"
+        )
+    
+    except Exception as e:
+        print(f"❌ Error rebuilding LangGraph index: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to rebuild index: {str(e)}"
+        )
+
+
+@router.get("/chatbot/langgraph/status")
+async def chatbot_langgraph_status():
+    """
+    Get the status of the LangGraph RAG chatbot system.
+    
+    Returns:
+        JSON with status information
+        
+    Response Body:
+        {
+            "status": "ready",
+            "pdf_exists": true,
+            "pdf_path": "...",
+            "index_exists": true,
+            "index_path": "...",
+            "database_path": "...",
+            "threads_count": 5
+        }
+    """
+    try:
+        from src.langgraph_rag_chatbot import check_status_langgraph
+        
+        status = check_status_langgraph()
+        
+        return JSONResponse(content=status)
+    
+    except Exception as e:
+        print(f"❌ Error checking LangGraph status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to check status: {str(e)}"
+        )
+
+
+@router.get("/chatbot/langgraph/threads")
+async def chatbot_langgraph_threads():
+    """
+    Get all conversation thread IDs for the LangGraph chatbot.
+    
+    Returns:
+        JSON with list of thread IDs
+        
+    Response Body:
+        {
+            "threads": ["user-123", "user-456", "default"],
+            "count": 3
+        }
+    """
+    try:
+        from src.langgraph_rag_chatbot import get_all_threads
+        
+        threads = get_all_threads()
+        
+        return JSONResponse(content={
+            "threads": threads,
+            "count": len(threads)
+        })
+    
+    except Exception as e:
+        print(f"❌ Error fetching threads: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch threads: {str(e)}"
+        )

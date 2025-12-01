@@ -20,10 +20,18 @@ class Settings(BaseSettings):
     Uses .env file if present in the project root.
     """
     
-    # Azure OpenAI Configuration
+    # Azure OpenAI Configuration (for baby monitoring)
     AZURE_OPENAI_ENDPOINT: str = ""
     AZURE_OPENAI_API_KEY: str = ""
     AZURE_OPENAI_DEPLOYMENT: str = ""
+    
+    # Azure OpenAI Configuration (for chatbot specifically)
+    CHATBOT_AZURE_OPENAI_ENDPOINT: str = ""
+    CHATBOT_AZURE_OPENAI_API_KEY: str = ""
+    CHATBOT_AZURE_OPENAI_DEPLOYMENT: str = ""
+    
+    # HuggingFace Configuration (for chatbot)
+    HF_TOKEN: str = ""
     
     # SMTP Email Configuration
     SMTP_HOST: str = ""
@@ -63,6 +71,13 @@ class Settings(BaseSettings):
     MOVEMENT_MAJOR_THRESHOLD: float = 2.0
     MOVEMENT_JERK_DELTA: float = 1.2
     MOVEMENT_STILLNESS_ALERT_SECONDS: int = 60
+    
+    # Camera Streaming Settings
+    CAMERA_INDEX: int = 0  # Default camera device index
+    STREAM_FPS: int = 15  # Frames per second for streaming
+    STREAM_JPEG_QUALITY: int = 85  # JPEG quality (1-100, higher = better quality but larger size)
+    STREAM_MAX_WIDTH: int = 1280  # Maximum width for streaming (0 = no limit) 1280 default
+    STREAM_MAX_HEIGHT: int = 720 # Maximum height for streaming (0 = no limit) 720 default
     
     if SettingsConfigDict is not None:
         model_config = SettingsConfigDict(

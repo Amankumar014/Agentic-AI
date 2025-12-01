@@ -40,11 +40,56 @@ async def lifespan(app: FastAPI):
     # Load settings to validate configuration
     settings = get_settings()
     print("\n⚙️  Configuration loaded:")
-    print(f"   • Azure Endpoint: {settings.AZURE_OPENAI_ENDPOINT or '(not configured)'}")
+    print(f"   • Azure Endpoint (Monitor): {settings.AZURE_OPENAI_ENDPOINT or '(not configured)'}")
+    print(f"   • HuggingFace Token (Chatbot): {'✅ Configured' if settings.HF_TOKEN else '(not configured)'}")
     print(f"   • Database: {settings.DATABASE_URL}")
     print(f"   • Frame Interval: {settings.FRAME_ANALYZE_INTERVAL}s")
     print(f"   • SMTP Host: {settings.SMTP_HOST or '(not configured)'}")
     print(f"   • Twilio SID: {settings.TWILIO_SID or '(not configured)'}")
+    
+    # Pre-initialize LangGraph chatbot (load heavy models at startup)
+    print("\n🤖 Initializing LangGraph RAG Chatbot...")
+    try:
+        from src.langgraph_rag_chatbot import (
+            initialize_chatbot_at_startup,
+            check_status_langgraph, 
+            rebuild_index_langgraph
+        )
+        
+        # Check status first
+        status = check_status_langgraph()
+        
+        if status['pdf_exists'] and not status['index_exists']:
+            # PDF exists but index missing - build it automatically
+            print("📄 PDF found, building FAISS index...")
+            try:
+                rebuild_index_langgraph()
+                print("✅ Index built successfully!")
+            except Exception as e:
+                print(f"⚠️  Failed to build index: {e}")
+                print("   You can rebuild later: POST /api/v1/chatbot/rebuild_index")
+        
+        # Now eagerly initialize ALL components (LLM, embeddings, retriever, graph)
+        status = check_status_langgraph()
+        if status['status'] == 'ready' or (status['pdf_exists'] and status['index_exists']):
+            # This loads everything: embeddings model, HuggingFace LLM, FAISS, graph compilation
+            initialize_chatbot_at_startup()
+            print("✅ LangGraph chatbot fully initialized and cached!")
+            print(f"   • PDF: ✅ Found")
+            print(f"   • Index: ✅ Loaded")
+            print(f"   • Embeddings: ✅ Cached")
+            print(f"   • LLM: ✅ Cached (HuggingFace)")
+            print(f"   • Graph: ✅ Compiled")
+            print(f"   ℹ️  Subsequent requests will be fast (no reinitialization)")
+        elif status['pdf_exists']:
+            print("⚠️  Chatbot partially ready (index building may be needed)")
+        else:
+            print("⚠️  Chatbot not ready - PDF missing")
+            print(f"   Expected at: {status['pdf_path']}")
+    except Exception as e:
+        print(f"⚠️  Chatbot initialization error: {e}")
+        import traceback
+        traceback.print_exc()
     
     print("\n" + "=" * 60)
     print("🚀 Baby Monitor Backend Ready!")
@@ -54,10 +99,15 @@ async def lifespan(app: FastAPI):
     print("  • ReDoc: http://localhost:8000/redoc")
     print("\nEndpoints:")
     print("  • POST /api/v1/frames/  - Upload and analyze frame")
+    print("  • GET  /api/v1/stream/  - Live video stream (MJPEG)")
     print("  • GET  /api/v1/alerts/  - Get recent alerts")
     print("  • GET  /api/v1/logs/    - Get frame analysis logs")
     print("  • GET  /api/v1/health/  - Health check")
     print("  • GET  /api/v1/stats/   - System statistics")
+    print("\nChatbot Endpoints:")
+    print("  • POST /api/v1/chatbot/ask            - Ask chatbot a question")
+    print("  • POST /api/v1/chatbot/rebuild_index  - Rebuild RAG index")
+    print("  • GET  /api/v1/chatbot/status         - Check chatbot status")
     print("\n" + "=" * 60 + "\n")
     
     yield
@@ -66,6 +116,15 @@ async def lifespan(app: FastAPI):
     print("\n" + "=" * 60)
     print("BABY MONITOR BACKEND - SHUTTING DOWN")
     print("=" * 60)
+    
+    # Cleanup camera streamer
+    try:
+        from src.camera_streamer import cleanup_camera_streamer
+        cleanup_camera_streamer()
+        print("✅ Camera streamer cleaned up")
+    except Exception as e:
+        print(f"⚠️  Error cleaning up camera streamer: {e}")
+    
     print("✅ Cleanup complete")
 
 

@@ -1,0 +1,374 @@
+[
+  {
+    "chunk_id": 0,
+    "text": "LALLA CARE : AN AGENTIC AI BABY MONITORING SYSTEM . \n \nCHUNK TITLE: Overview of the Lalla Care Website \nCHUNK CONTENT: \nLalla Care is a baby monitoring website that helps parents track their baby in real time through a \nlive video feed. It offers features such as sleep tracking, activity history, environmental \nmonitoring, alerts, and a built-in assistant to answer questions.",
+    "page": 1,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 1,
+    "text": ", activity history, environmental \nmonitoring, alerts, and a built-in assistant to answer questions. The website is designed for non-\ntechnical users and provides a simple, organized layout with six main pages: Dashboard, Live \nFeed, Sleep Logs, Activity, Alerts, and Settings. A chatbot assistant is available on all pages to \nhelp answer user questions about either baby care or how to use the website.",
+    "page": 1,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 2,
+    "text": "ilable on all pages to \nhelp answer user questions about either baby care or how to use the website. \n \nCHUNK TITLE: Main Navigation Bar Overview \nCHUNK CONTENT: \nThe main navigation bar appears at the very top of every page. It contains the Lalla Care logo on \nthe left and five navigation tabs on the right. The tabs are Dashboard, Live Feed, Sleep Logs, \nActivity, and Settings. Clicking any tab switches to its corresponding page. The active page is \nmarked with a highlighted underline.",
+    "page": 1,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 3,
+    "text": "any tab switches to its corresponding page. The active page is \nmarked with a highlighted underline. This navigation bar serves as the primary way to move \nbetween sections of the website. \n \nCHUNK TITLE: Navigation Tabs - Layout and Contents \nCHUNK CONTENT: \nThe navigation tabs appear horizontally across the top of all pages. The tabs are: \nDashboard: Opens the home page with camera feed and daily summaries. \nLive Feed: Opens a dedicated view of the camera with enhanced controls.",
+    "page": 1,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 4,
+    "text": "a feed and daily summaries. \nLive Feed: Opens a dedicated view of the camera with enhanced controls. \nSleep Logs: Displays sleep patterns, statistics, and history. \nActivity: Shows all recorded activities such as sleep, wake, feeding, crying, and adult visits. \nSettings: Allows configuration of camera URL, alert cooldown, and detection preferences. \nThese tabs remain fixed in place as the user navigates.",
+    "page": 1,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 5,
+    "text": "alert cooldown, and detection preferences. \nThese tabs remain fixed in place as the user navigates. \n \nCHUNK TITLE: Dashboard Page – General Overview \nCHUNK CONTENT: \nThe Dashboard is the main landing page and central hub of the website. It provides a real-time",
+    "page": 1,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 6,
+    "text": "view of the baby’s environment, daily summary cards, quick actions, audio monitoring, \nenvironmental conditions, and recent activity. The Dashboard automatically loads first when the \nuser enters the site or when clicking the Dashboard tab at the top. \n \nCHUNK TITLE: Dashboard – Last Update Indicator \nCHUNK CONTENT: \nThe Last Update Indicator is located in the top right of the Dashboard page. It displays the time \nof the most recent data update along with a small pulsing indicator.",
+    "page": 2,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 7,
+    "text": "ard page. It displays the time \nof the most recent data update along with a small pulsing indicator. This helps users confirm \nthat the monitoring system is actively refreshing and connected. No interaction is required; the \nindicator updates automatically. \n \nCHUNK TITLE: Dashboard – Live Camera Feed Area \nCHUNK CONTENT: \nThe Live Camera Feed occupies a large area on the left side of the Dashboard. It includes a \ncamera header showing the camera name and a label indicating the feed is live.",
+    "page": 2,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 8,
+    "text": "board. It includes a \ncamera header showing the camera name and a label indicating the feed is live. When \nconnected, the video appears automatically. If no connection exists, a placeholder message \nsuch as “Establishing Connection...” is shown. This part of the Dashboard is for viewing only and \ncannot be interacted with directly. \n \nCHUNK TITLE: Dashboard – Daily Summary Cards \nCHUNK CONTENT: \nThe Daily Summary Cards are located below the camera feed on the left side.",
+    "page": 2,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 9,
+    "text": "y Cards \nCHUNK CONTENT: \nThe Daily Summary Cards are located below the camera feed on the left side. They show key \ndaily statistics including total sleep duration, number of feeding sessions, number of diaper \nchanges, and total sleep change compared to previous days. Each card includes a value and a \npercentage increase or decrease, displayed using up or down arrows. The cards are \ninformational and do not require user interaction.",
+    "page": 2,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 10,
+    "text": "displayed using up or down arrows. The cards are \ninformational and do not require user interaction. \n \nCHUNK TITLE: Dashboard – Control Buttons Area \nCHUNK CONTENT: \nJust below the summary cards on the left side are three control buttons: Night Light, Lullaby, \nand Alerts. The Night Light button toggles the nursery night light. The Lullaby button plays",
+    "page": 2,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 11,
+    "text": "soothing music. The Alerts button navigates directly to the Alerts page. These buttons provide \nquick access to commonly used actions. \n \nCHUNK TITLE: Dashboard – Audio Monitor Card \nCHUNK CONTENT: \nThe Audio Monitor Card is located on the right side of the Dashboard. It displays animated \nsound bars that represent the audio levels detected in the nursery. This visual representation \nhelps users observe sound activity even when not listening directly.",
+    "page": 3,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 12,
+    "text": "ry. This visual representation \nhelps users observe sound activity even when not listening directly. The card is informative only \nand has no buttons. \n \nCHUNK TITLE: Dashboard – Temperature and Humidity Card \nCHUNK CONTENT: \nThis card appears on the right side below the Audio Monitor. It displays the current temperature \nin Fahrenheit and humidity percentage in the nursery. A circular \"Listen In\" button is present at \nthe center, enabling the user to activate live audio listening.",
+    "page": 3,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 13,
+    "text": "ar \"Listen In\" button is present at \nthe center, enabling the user to activate live audio listening. Small trend indicators show how \ntemperature and humidity have changed over different time intervals such as 10, 12, and 20 \nhours. \n \nCHUNK TITLE: Dashboard – Recent Activity Feed \nCHUNK CONTENT: \nThe Recent Activity Feed is at the bottom right of the Dashboard.",
+    "page": 3,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 14,
+    "text": "ent Activity Feed \nCHUNK CONTENT: \nThe Recent Activity Feed is at the bottom right of the Dashboard. It shows a chronological list of \nrecent events such as sleep sessions, wake periods, crying detection, feeding sessions, and adult \npresence. Each item includes a description, time, and duration. The feed scrolls if many events \nexist.",
+    "page": 3,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 15,
+    "text": "sence. Each item includes a description, time, and duration. The feed scrolls if many events \nexist. \n \nCHUNK TITLE: Live Feed Page Overview \nCHUNK CONTENT: \nThe Live Feed page provides an expanded camera view with controls for zoom, brightness, night \nmode, and recording. It is accessed by clicking the Live Feed tab in the top navigation bar. This \npage is designed for users who want full control over viewing and adjusting the camera feed.",
+    "page": 3,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 16,
+    "text": "CHUNK TITLE: Live Feed – Page Header \nCHUNK CONTENT: \nAt the top of the Live Feed page is the header section, displaying the title \"Live Camera Feed,\" \nthe camera name, and the last update indicator. This helps users confirm they are viewing the \nmost recent feed. \n \nCHUNK TITLE: Live Feed – Enhanced Video Feed Section \nCHUNK CONTENT: \nThe main video feed is displayed on the left side. It includes a larger view than the Dashboard \nand provides several user controls below it.",
+    "page": 4,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 17,
+    "text": "eft side. It includes a larger view than the Dashboard \nand provides several user controls below it. These include a zoom slider ranging from 1x to 3x, a \nbrightness slider ranging from 0 to 100 percent, a night mode toggle, and a recording button \nthat turns red when activated. This section is designed for viewing and adjusting the camera \nfeed. \n \nCHUNK TITLE: Live Feed – Quick Action Buttons \nCHUNK CONTENT: \nBelow the main video controls are additional action buttons.",
+    "page": 4,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 18,
+    "text": "– Quick Action Buttons \nCHUNK CONTENT: \nBelow the main video controls are additional action buttons. These include a snapshot button \nfor taking a picture, a two-way audio button for speaking through the monitor, a night light \ntoggle, and a lullaby playback button. These buttons allow users to interact with the baby’s \nenvironment without navigating back to the Dashboard.",
+    "page": 4,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 19,
+    "text": "ttons allow users to interact with the baby’s \nenvironment without navigating back to the Dashboard. \n \nCHUNK TITLE: Live Feed – Status Cards Sidebar \nCHUNK CONTENT: \nOn the right side of the Live Feed page is a vertical sidebar containing status cards. These cards \ndisplay the baby's state (such as sleeping or awake), whether an adult is present, whether crying \nis detected, and the connection status for camera, audio, and system updates.",
+    "page": 4,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 20,
+    "text": "esent, whether crying \nis detected, and the connection status for camera, audio, and system updates. Color-coded \nindicators help users assess status at a glance. \n \nCHUNK TITLE: Sleep Logs Page Overview \nCHUNK CONTENT: \nThe Sleep Logs page is accessed through the top navigation. It provides detailed information on",
+    "page": 4,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 21,
+    "text": "sleep patterns and statistics. This page helps parents understand how long the baby has slept, \nhow often the baby wakes up, and the overall sleep quality. \n \nCHUNK TITLE: Sleep Logs – Time Period Selector \nCHUNK CONTENT: \nAt the top right of the Sleep Logs page is a time period selector. It allows users to view sleep \ndata for Today, Week, or Month. Selecting a time period updates the statistics and charts shown \non the page.",
+    "page": 5,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 22,
+    "text": "Today, Week, or Month. Selecting a time period updates the statistics and charts shown \non the page. \n \nCHUNK TITLE: Sleep Logs – Statistics Cards \nCHUNK CONTENT: \nFive statistics cards are displayed near the top of the Sleep Logs page. They show total sleep \nduration, average session length, number of wake-ups, longest session duration, and an overall \nsleep quality score. These cards provide a condensed summary of the baby’s sleep for the \nselected time period.",
+    "page": 5,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 23,
+    "text": "ty score. These cards provide a condensed summary of the baby’s sleep for the \nselected time period. \n \nCHUNK TITLE: Sleep Logs – Sleep Pattern Chart \nCHUNK CONTENT: \nA large chart on the left side of the Sleep Logs page displays sleep patterns over time. Sleep \nperiods are highlighted, while awake periods appear differently. Hour markers help users \ninterpret when sleep occurred throughout the day.",
+    "page": 5,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 24,
+    "text": "riods appear differently. Hour markers help users \ninterpret when sleep occurred throughout the day. \n \nCHUNK TITLE: Sleep Logs – Sleep Quality Score Gauge \nCHUNK CONTENT: \nOn the right side of the Sleep Logs page is a circular gauge showing the baby’s overall sleep \nquality score. This visual meter provides an intuitive understanding of how restful the baby’s \nsleep has been.",
+    "page": 5,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 25,
+    "text": "re. This visual meter provides an intuitive understanding of how restful the baby’s \nsleep has been. \n \nCHUNK TITLE: Sleep Logs – Recent Sleep Sessions List \nCHUNK CONTENT: \nAt the bottom of the Sleep Logs page is a scrollable list of recent sleep sessions. Each entry",
+    "page": 5,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 26,
+    "text": "includes start and end times, duration, date, and a quality label such as excellent, good, or poor. \nThis gives users a detailed record of each sleep period. \n \nCHUNK TITLE: Activity Page Overview \nCHUNK CONTENT: \nThe Activity page provides a complete list of all events recorded. It helps parents understand \nthe baby's entire day, including sleep periods, wake events, crying, feeding sessions, and adult \nvisits. The page also includes summaries and insights based on selected time periods.",
+    "page": 6,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 27,
+    "text": "ns, and adult \nvisits. The page also includes summaries and insights based on selected time periods. \n \nCHUNK TITLE: Activity Page – Time Period Selector \nCHUNK CONTENT: \nA time period selector in the top right allows the user to view activity for Today, Week, or \nMonth. Selecting a time period updates the timeline and summaries on the page.",
+    "page": 6,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 28,
+    "text": "for Today, Week, or \nMonth. Selecting a time period updates the timeline and summaries on the page. \n \nCHUNK TITLE: Activity Page – Activity Filter Buttons \nCHUNK CONTENT: \nBelow the header are several filter buttons that allow users to narrow the view to specific \nactivity types such as sleep, wake, crying, feeding, or adult visits. Clicking a filter highlights it and \nupdates the list below to show only the chosen activity type.",
+    "page": 6,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 29,
+    "text": ". Clicking a filter highlights it and \nupdates the list below to show only the chosen activity type. \n \nCHUNK TITLE: Activity Page – Activity Timeline \nCHUNK CONTENT: \nThe main part of the Activity page is a vertical timeline in the center. A line runs down the left \nside, with circular icons marking each activity. To the right of each icon is a card with details \nsuch as description, timestamp, duration, and additional notes. Users can scroll to view older \nactivities.",
+    "page": 6,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 30,
+    "text": "description, timestamp, duration, and additional notes. Users can scroll to view older \nactivities. \n \nCHUNK TITLE: Activity Page – Activity Summary Cards \nCHUNK CONTENT: \nAt the bottom of the Activity page are three summary cards. These show the most active hours",
+    "page": 6,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 31,
+    "text": "of the day, the distribution of different activity types, and quick insights about patterns such as \nsleep consistency or feeding routine. \n \nCHUNK TITLE: Alerts Page Overview \nCHUNK CONTENT: \nThe Alerts page provides a full history of system alerts. These alerts notify parents of important \nevents such as crying detection, unusual movement, adult presence, or environmental issues. \nThis page helps users review what has happened and clear alerts when needed.",
+    "page": 7,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 32,
+    "text": "environmental issues. \nThis page helps users review what has happened and clear alerts when needed. \n \nCHUNK TITLE: Alerts Page – Page Header \nCHUNK CONTENT: \nThe top of the Alerts page contains the title \"Alert History,\" a brief description, and a \"Clear All\" \nbutton positioned on the top right. This allows the user to remove all past alerts at once. \n \nCHUNK TITLE: Alerts Page – Alert List \nCHUNK CONTENT: \nThe Alert List occupies the main portion of the page.",
+    "page": 7,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 33,
+    "text": "TLE: Alerts Page – Alert List \nCHUNK CONTENT: \nThe Alert List occupies the main portion of the page. Each alert is displayed as a card with a \ncolored left border indicating severity: red for critical, orange for warnings, and blue for \ninformational. Each alert includes a message, timestamp, and a severity label. Users can scroll to \nbrowse all alerts. \n \nCHUNK TITLE: Alerts Page – Empty State Display \nCHUNK CONTENT: \nWhen no alerts exist, an empty state appears at the center of the page.",
+    "page": 7,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 34,
+    "text": "ate Display \nCHUNK CONTENT: \nWhen no alerts exist, an empty state appears at the center of the page. It shows a large \nclipboard icon, a message stating that no alerts are found, and a note explaining that the alert \nhistory is currently empty. This helps the user understand that no issues are present. \n \nCHUNK TITLE: Settings Page Overview \nCHUNK CONTENT: \nThe Settings page is accessed via the top navigation bar and allows users to configure the",
+    "page": 7,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 35,
+    "text": "monitoring system. Users can enter their camera URL, adjust alert frequency, enable or disable \nvarious detection options, and start or stop monitoring. \n \nCHUNK TITLE: Settings Page – Camera Configuration Card \nCHUNK CONTENT: \nThis card appears on the left side of the Settings page. It contains a field where users can enter \ntheir camera's URL and a field to adjust the alert cooldown time. Alert cooldown determines \nhow many seconds must pass between repeated alerts.",
+    "page": 8,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 36,
+    "text": "alert cooldown time. Alert cooldown determines \nhow many seconds must pass between repeated alerts. This card is essential for connecting the \ncamera feed and controlling alert frequency. \n \nCHUNK TITLE: Settings Page – Detection Settings Card \nCHUNK CONTENT: \nLocated on the right side of the Settings page, this card includes checkboxes for enabling or \ndisabling Baby Detection, Adult Detection, and Crying Detection. Users can customize the types \nof monitoring they want active.",
+    "page": 8,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 37,
+    "text": "dult Detection, and Crying Detection. Users can customize the types \nof monitoring they want active. \n \nCHUNK TITLE: Settings Page – Monitoring Control Card \nCHUNK CONTENT: \nAt the bottom of the Settings page is a wide card with three main buttons: Start Monitoring, \nStop Monitoring, and Save Settings. Save Settings applies changes. Start Monitoring activates \nthe monitoring system using the saved preferences. Stop Monitoring halts all monitoring \nprocesses.",
+    "page": 8,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 38,
+    "text": "the monitoring system using the saved preferences. Stop Monitoring halts all monitoring \nprocesses. When active, the Start button changes to show that monitoring is running. \n \nCHUNK TITLE: Chatbot Assistant Overview \nCHUNK CONTENT: \nThe chatbot assistant appears on every page as a floating circular button located at the bottom-\nright corner. Clicking the button opens a chat window. The assistant provides guidance on using \nthe website and answers general baby care questions.",
+    "page": 8,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 39,
+    "text": "ndow. The assistant provides guidance on using \nthe website and answers general baby care questions. The chatbot is always accessible. \n \nCHUNK TITLE: Chatbot – Floating Button Details",
+    "page": 8,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 40,
+    "text": "CHUNK CONTENT: \nThe floating button stays anchored to the bottom-right corner. When closed, it displays a \ncircular icon. A notification indicator may appear when new information is available. Users click \nthis button to open or close the chatbot window. \n \nCHUNK TITLE: Chatbot – Chat Window Header \nCHUNK CONTENT: \nWhen opened, the chat window appears with a header at the top.",
+    "page": 9,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 41,
+    "text": "– Chat Window Header \nCHUNK CONTENT: \nWhen opened, the chat window appears with a header at the top. The header contains an icon, \nthe title \"BabyBot Assistant,\" a subheading stating the bot is ready to help, and a close button \non the right side. Clicking the close button hides the chat window. \n \nCHUNK TITLE: Chatbot – Messages Area \nCHUNK CONTENT: \nThe central portion of the chatbot window displays the message history.",
+    "page": 9,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 42,
+    "text": "ssages Area \nCHUNK CONTENT: \nThe central portion of the chatbot window displays the message history. Messages from the \nassistant appear on the left, and messages from the user appear on the right. Each message \nincludes a timestamp. New messages automatically scroll into view. When the assistant is \ntyping, an indicator is displayed.",
+    "page": 9,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 43,
+    "text": "w messages automatically scroll into view. When the assistant is \ntyping, an indicator is displayed. \n \nCHUNK TITLE: Chatbot – Quick Questions Buttons \nCHUNK CONTENT: \nAt the beginning of a conversation, four quick question buttons appear at the bottom of the \nmessages area. These buttons allow users to ask common questions, such as inquiries about \nsleep, crying, feeding, or temperature.",
+    "page": 9,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 44,
+    "text": "llow users to ask common questions, such as inquiries about \nsleep, crying, feeding, or temperature. \n \nCHUNK TITLE: Chatbot – Input Area \nCHUNK CONTENT: \nThe bottom section of the chatbot contains a text input box with a placeholder that prompts \nusers to type their question. A send button positioned to the right transmits the message. Users \ncan also press the Enter key to send questions. \n \nCHUNK TITLE: Frequently Asked Questions – Camera Setup",
+    "page": 9,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 45,
+    "text": "CHUNK CONTENT: \nUsers often ask how to connect their camera. The answer is: open the Settings page, find the \nCamera Configuration card, enter the camera URL into the designated field, and click Save \nSettings. \n \nCHUNK TITLE: Frequently Asked Questions – Start Monitoring \nCHUNK CONTENT: \nTo begin monitoring, users must go to the Settings page, ensure that the correct camera URL \nand detection options are configured, click Save Settings, and then press the Start Monitoring \nbutton.",
+    "page": 10,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 46,
+    "text": "detection options are configured, click Save Settings, and then press the Start Monitoring \nbutton. The button changes appearance when monitoring is active. \n \nCHUNK TITLE: Frequently Asked Questions – Alert Levels \nCHUNK CONTENT: \nAlerts have three levels. Informational alerts indicate general updates. Warning alerts indicate \nsomething that needs attention. Critical alerts indicate urgent situations that require immediate \naction. These can be reviewed on the Alerts page.",
+    "page": 10,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 47,
+    "text": "indicate urgent situations that require immediate \naction. These can be reviewed on the Alerts page. \n \nCHUNK TITLE: Frequently Asked Questions – Viewing Sleep Patterns \nCHUNK CONTENT: \nSleep patterns can be viewed on the Sleep Logs page. Users can choose Today, Week, or Month \nusing the time selector. Statistics cards and charts show patterns, quality, and session history.",
+    "page": 10,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 48,
+    "text": "h \nusing the time selector. Statistics cards and charts show patterns, quality, and session history. \n \nCHUNK TITLE: Frequently Asked Questions – Controlling Nursery Features \nCHUNK CONTENT: \nUsers can toggle the night light or play a lullaby from the Dashboard using the control buttons \nor from the Live Feed page under Quick Actions. These features help users soothe or check on \nthe baby remotely. \n \nCHUNK TITLE: Frequently Asked Questions – Daily Summary Meaning",
+    "page": 10,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 49,
+    "text": "CHUNK CONTENT: \nThe Daily Summary shows today’s totals for sleep duration, feeding frequency, diaper changes, \nand overall sleep time. Percentage changes compare today’s values to previous days. \n \nCHUNK TITLE: Frequently Asked Questions – Viewing All Activities \nCHUNK CONTENT: \nTo view the baby’s full activity timeline, users should go to the Activity page. They can filter by \nactivity type and select a time period such as Today, Week, or Month.",
+    "page": 11,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 50,
+    "text": "vity page. They can filter by \nactivity type and select a time period such as Today, Week, or Month. \n \nCHUNK TITLE: Frequently Asked Questions – Alert Cooldown Explanation \nCHUNK CONTENT: \nAlert cooldown is the number of seconds between repeated alerts of the same type. This \nprevents receiving repeated notifications too frequently. The cooldown setting is located in the \nCamera Configuration card under Settings.",
+    "page": 11,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 51,
+    "text": "ns too frequently. The cooldown setting is located in the \nCamera Configuration card under Settings. \n \nCHUNK TITLE: Frequently Asked Questions – Disabling Detection Types \nCHUNK CONTENT: \nUsers can disable Baby Detection, Adult Detection, or Crying Detection through the Detection \nSettings card on the Settings page by unchecking the corresponding boxes.",
+    "page": 11,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 52,
+    "text": "ion through the Detection \nSettings card on the Settings page by unchecking the corresponding boxes. \n \nCHUNK TITLE: Frequently Asked Questions – Clearing All Alerts \nCHUNK CONTENT: \nUsers can remove all alerts at once by opening the Alerts page and selecting the Clear All button \nat the top right. \n \nCHUNK TITLE: Frequently Asked Questions – Audio Monitor Function \nCHUNK CONTENT: \nThe Audio Monitor on the Dashboard displays moving sound bars that reflect live audio levels \nfrom the nursery.",
+    "page": 11,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 53,
+    "text": "onitor on the Dashboard displays moving sound bars that reflect live audio levels \nfrom the nursery. This helps users understand noise activity even when sound is muted.",
+    "page": 11,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 54,
+    "text": "CHUNK TITLE: Frequently Asked Questions – Using Listen In Feature \nCHUNK CONTENT: \nThe Listen In feature is located inside the Temperature and Humidity card on the Dashboard. \nPressing the circular Listen In button activates live audio streaming from the nursery. \n \nCHUNK TITLE: Frequently Asked Questions – Capturing a Snapshot \nCHUNK CONTENT: \nOn the Live Feed page, the Capture Snapshot button below the video feed allows users to take a \nstill picture from the camera.",
+    "page": 12,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 55,
+    "text": "Capture Snapshot button below the video feed allows users to take a \nstill picture from the camera. The snapshot is captured instantly. \n \nCHUNK TITLE: Frequently Asked Questions – Status Indicators Meaning \nCHUNK CONTENT: \nColor-coded dots and borders are used throughout the website. A green dot indicates \nsomething is active or connected. A red dot indicates a critical alert. A pulsing dot means the \nsystem is receiving live updates.",
+    "page": 12,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 56,
+    "text": "ed. A red dot indicates a critical alert. A pulsing dot means the \nsystem is receiving live updates. \n \nCHUNK TITLE: Color and Visual Indicator Guide \nCHUNK CONTENT: \nGreen and teal tones indicate normal operation and good conditions. Blue is used for \ninformational updates. Orange indicates warnings that may require attention soon. Red \nindicates critical alerts. Alert cards display a colored border to match the alert severity.",
+    "page": 12,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 57,
+    "text": "n. Red \nindicates critical alerts. Alert cards display a colored border to match the alert severity. Icons for \nactivities and states appear on Timeline cards and status cards to help differentiate events. \n \nCHUNK TITLE: Quick Navigation Instructions \nCHUNK CONTENT: \nTo view the baby: open Dashboard or Live Feed. \nTo check sleep patterns: open Sleep Logs. \nTo review today’s events: open Activity. \nTo view alerts: open Alerts. \nTo change settings or connect a camera: open Settings.",
+    "page": 12,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 58,
+    "text": "open Activity. \nTo view alerts: open Alerts. \nTo change settings or connect a camera: open Settings. \nTo ask questions: click the assistant button on the bottom-right corner of the screen.",
+    "page": 12,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 59,
+    "text": "CHUNK TITLE: Real-Time Update Behavior \nCHUNK CONTENT: \nThe website updates data automatically. The camera feed refreshes continuously. Status cards \nshow live information. Alerts appear in real time as events occur. Activity logs also update \nautomatically. The Last Update indicator confirms that fresh data is being received.",
+    "page": 13,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 60,
+    "text": "gs also update \nautomatically. The Last Update indicator confirms that fresh data is being received. \n \nCHUNK TITLE: Getting Started Steps for New Users \nCHUNK CONTENT: \nNew users should begin by opening the Settings page, entering their camera URL, setting an \nalert cooldown value, selecting which detections to enable, clicking Save Settings, and then \nclicking Start Monitoring. After monitoring begins, the Dashboard shows live data.",
+    "page": 13,
+    "source": "LALLA CARE.pdf"
+  },
+  {
+    "chunk_id": 61,
+    "text": "ttings, and then \nclicking Start Monitoring. After monitoring begins, the Dashboard shows live data. \n \nCHUNK TITLE: Recommended Tips for Best Use \nCHUNK CONTENT: \nFor the best experience, users should check the Dashboard frequently for quick updates, use \nSleep Logs to track long-term patterns, check Activity for daily details, enable only needed \ndetections to avoid unnecessary alerts, set an appropriate cooldown to prevent alert spam, and \nrely on the chatbot for assistance.",
+    "page": 13,
+    "source": "LALLA CARE.pdf"
+  }
+]
