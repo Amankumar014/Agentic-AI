@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, UploadFile, File, Query, HTTPException
+from fastapi import APIRouter, UploadFile, File, Query, HTTPException, WebSocket, WebSocketDisconnect
 from starlette.requests import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlmodel import select
@@ -20,6 +20,96 @@ from src.utils import run_blocking
 
 # Create API router
 router = APIRouter()
+
+
+def _build_combined_facial_state(emotion_result, face_mesh_result, iris_tracking_result):
+    """
+    Build a combined facial state summary from emotion, face mesh, and iris tracking results.
+    
+    Returns a structured summary useful for downstream analysis and alerting.
+    """
+    if not emotion_result and not face_mesh_result and not iris_tracking_result:
+        return None
+    
+    combined = {
+        "facial_analysis_available": bool(emotion_result or face_mesh_result or iris_tracking_result),
+    }
+    
+    # Emotion state
+    if emotion_result and isinstance(emotion_result, dict):
+        combined["emotion"] = {
+            "label": emotion_result.get("emotion_label", "unknown"),
+            "probability": emotion_result.get("probability", 0.0),
+            "source": emotion_result.get("source", "unknown"),
+        }
+    
+    # Face mesh state
+    if face_mesh_result and isinstance(face_mesh_result, dict):
+        combined["face_mesh"] = {
+            "detected": face_mesh_result.get("face_detected", False),
+            "eyes_state": face_mesh_result.get("eyes_state", "unknown"),
+            "mouth_state": face_mesh_result.get("mouth_state", "unknown"),
+            "face_down_detected": face_mesh_result.get("face_down_detected", False),
+            "eye_aspect_ratio": face_mesh_result.get("eye_aspect_ratio", {}).get("average", 0.0),
+            "mouth_aspect_ratio": face_mesh_result.get("mouth_aspect_ratio", 0.0),
+        }
+    
+    # Iris tracking state
+    if iris_tracking_result and isinstance(iris_tracking_result, dict):
+        combined["iris_tracking"] = {
+            "detected": iris_tracking_result.get("iris_detected", False),
+            "eyes_state": iris_tracking_result.get("eyes_state", "unknown"),
+            "closure_pattern": iris_tracking_result.get("closure_pattern", "unknown"),
+            "blink_frequency": iris_tracking_result.get("blinking", {}).get("frequency_per_minute", 0.0),
+            "gaze_direction": iris_tracking_result.get("gaze_direction", {}),
+        }
+    
+    # Aggregate sleep/wake state
+    eyes_closed_indicators = []
+    
+    # Check face mesh
+    if face_mesh_result and isinstance(face_mesh_result, dict):
+        if face_mesh_result.get("eyes_state") == "closed":
+            eyes_closed_indicators.append("face_mesh")
+    
+    # Check iris tracking
+    if iris_tracking_result and isinstance(iris_tracking_result, dict):
+        if iris_tracking_result.get("eyes_state") == "closed":
+            eyes_closed_indicators.append("iris_tracking")
+        if iris_tracking_result.get("closure_pattern") in ["sleeping", "drowsy"]:
+            eyes_closed_indicators.append("closure_pattern")
+    
+    # Determine likely sleep/wake state
+    if len(eyes_closed_indicators) >= 2:
+        combined["likely_state"] = "sleeping"
+    elif len(eyes_closed_indicators) == 1:
+        combined["likely_state"] = "drowsy"
+    else:
+        combined["likely_state"] = "awake"
+    
+    # Detect crying
+    crying_indicators = []
+    if emotion_result and isinstance(emotion_result, dict):
+        if emotion_result.get("emotion_label") in ["crying", "distress", "pain"]:
+            crying_indicators.append("emotion")
+    
+    if face_mesh_result and isinstance(face_mesh_result, dict):
+        if face_mesh_result.get("mouth_state") == "open":
+            # Check mouth aspect ratio threshold
+            mar = face_mesh_result.get("mouth_aspect_ratio", 0.0)
+            if mar > 0.6:  # High mouth opening
+                crying_indicators.append("mouth_open")
+    
+    combined["crying_indicators"] = crying_indicators
+    combined["likely_crying"] = len(crying_indicators) >= 1
+    
+    # Face-down detection
+    if face_mesh_result and isinstance(face_mesh_result, dict):
+        combined["face_down_risk"] = face_mesh_result.get("face_down_detected", False)
+    else:
+        combined["face_down_risk"] = False
+    
+    return combined
 
 
 @router.post("/frames/")
@@ -85,6 +175,13 @@ async def upload_frame(file: UploadFile = File(...)):
                 "emotion": workflow_result.get("emotion_result"),
                 "audio": workflow_result.get("audio_result"),
             },
+            "facial_mesh_data": workflow_result.get("face_mesh_result"),
+            "iris_tracking_data": workflow_result.get("iris_tracking_result"),
+            "combined_facial_state": _build_combined_facial_state(
+                workflow_result.get("emotion_result"),
+                workflow_result.get("face_mesh_result"),
+                workflow_result.get("iris_tracking_result")
+            ),
             "audio": workflow_result.get("audio_result"),
             "decision": decision,
             "alert": decision.get("alert", False),
@@ -177,6 +274,13 @@ async def upload_frame_with_audio(
                 "emotion": workflow_result.get("emotion_result"),
                 "audio": workflow_result.get("audio_result"),
             },
+            "facial_mesh_data": workflow_result.get("face_mesh_result"),
+            "iris_tracking_data": workflow_result.get("iris_tracking_result"),
+            "combined_facial_state": _build_combined_facial_state(
+                workflow_result.get("emotion_result"),
+                workflow_result.get("face_mesh_result"),
+                workflow_result.get("iris_tracking_result")
+            ),
             "audio": workflow_result.get("audio_result"),
             "decision": decision,
             "alert": decision.get("alert", False),
@@ -311,6 +415,104 @@ async def health_check():
     }
 
 
+@router.websocket("/detections/live")
+async def detections_live_websocket(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time detection results streaming.
+    
+    Continuously sends detection results (YOLO, pose, movement, emotion,
+    face mesh, iris tracking, etc.) to connected clients while the camera
+    stream is running.
+    
+    This endpoint is designed for Live Dashboard displays where real-time
+    monitoring data is needed.
+    
+    Protocol:
+        - Client connects to ws://localhost:8000/api/v1/detections/live
+        - Server sends JSON messages with detection results every ~1 second
+        - Message format: {
+            "timestamp": "2025-12-01T12:00:00",
+            "yolo": {...},
+            "pose": {...},
+            "movement": {...},
+            "emotion": {...},
+            "face_mesh": {...},
+            "iris_tracking": {...},
+            "combined_facial_state": {...},
+            "summary": {...}
+          }
+        - Client can disconnect at any time
+    
+    Example (JavaScript):
+        const ws = new WebSocket('ws://localhost:8000/api/v1/detections/live');
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Detection results:', data);
+            // Update dashboard UI with data.yolo, data.pose, etc.
+        };
+    """
+    from src.detection_broadcaster import get_detection_broadcaster
+    
+    # Accept the WebSocket connection
+    await websocket.accept()
+    
+    # Get the broadcaster
+    broadcaster = get_detection_broadcaster(detection_interval=1.0)
+    
+    try:
+        # Add client to broadcaster
+        await broadcaster.add_client(websocket)
+        
+        # Keep connection alive
+        while True:
+            # Wait for messages from client (if any)
+            # This keeps the connection open
+            try:
+                message = await websocket.receive_text()
+                # Client can send commands if needed (not currently used)
+                print(f"Received from client: {message}")
+            except WebSocketDisconnect:
+                break
+    
+    except WebSocketDisconnect:
+        print("Client disconnected")
+    
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+    
+    finally:
+        # Remove client from broadcaster
+        await broadcaster.remove_client(websocket)
+
+
+@router.get("/detections/latest")
+async def get_latest_detections():
+    """
+    Get the latest detection results without WebSocket.
+    
+    Returns the most recent detection data from the detection broadcaster.
+    Useful for polling-based clients or one-time queries.
+    
+    Returns:
+        JSON with latest detection results or empty dict if no detections yet
+    """
+    from src.detection_broadcaster import get_detection_broadcaster
+    
+    broadcaster = get_detection_broadcaster()
+    latest = broadcaster.get_latest_results()
+    
+    if not latest:
+        return {
+            "status": "no_data",
+            "message": "No detection results available yet. Start the camera stream first."
+        }
+    
+    return {
+        "status": "success",
+        **latest
+    }
+
+
 @router.get("/stream/")
 async def stream_video(request: Request):
     """
@@ -383,6 +585,97 @@ async def stream_video(request: Request):
             pass
         except Exception as e:
             print(f"Error in video stream: {e}")
+        finally:
+            # Unregister this viewer
+            streamer.remove_viewer()
+    
+    return StreamingResponse(
+        generate_frames(),
+        media_type=f"multipart/x-mixed-replace; boundary={boundary}",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@router.get("/stream/annotated/")
+async def stream_annotated_video(request: Request):
+    """
+    Stream live video feed with detection visualizations overlaid.
+    
+    This endpoint provides a continuous MJPEG stream with:
+    - Bounding boxes around detected babies and adults
+    - Pose estimation skeleton (green lines)
+    - Face mesh landmarks (magenta lines)
+    - Iris tracking (cyan markers)
+    - Status overlay with emotion, pose, and alerts
+    
+    Display in HTML:
+        <img src="http://localhost:8000/api/v1/stream/annotated/" />
+    
+    Features:
+        - Real-time detection visualizations
+        - Thread-safe for multiple concurrent viewers
+        - Automatic frame rate control
+        - Handles client disconnections gracefully
+    
+    Returns:
+        StreamingResponse: MJPEG video stream with detection overlays
+    """
+    from src.annotated_video_streamer import get_annotated_streamer
+    
+    # Get the annotated streamer instance
+    streamer = get_annotated_streamer()
+    
+    # Register this viewer
+    streamer.add_viewer()
+    
+    # Wait a moment for initialization
+    await asyncio.sleep(0.2)
+    
+    # Define boundary
+    boundary = "----annotated-video-boundary"
+    boundary_bytes = boundary.encode()
+    
+    async def generate_frames():
+        """Generate MJPEG frames with annotations."""
+        frame_delay = 0.1  # ~10 FPS for annotated stream
+        
+        try:
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                # Get latest annotated frame
+                frame_bytes = streamer.get_frame()
+                
+                if frame_bytes is None:
+                    # No frame available yet, wait and retry
+                    await asyncio.sleep(0.1)
+                    continue
+                
+                # Send frame in MJPEG format
+                frame_data = (
+                    b"--" + boundary_bytes + b"\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame_bytes)).encode() + b"\r\n\r\n"
+                    + frame_bytes
+                    + b"\r\n"
+                )
+                
+                yield frame_data
+                
+                # Control frame rate
+                await asyncio.sleep(frame_delay)
+        
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error in annotated video stream: {e}")
         finally:
             # Unregister this viewer
             streamer.remove_viewer()

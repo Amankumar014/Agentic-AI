@@ -88,8 +88,12 @@ FINAL_STATES = [
 
 MULTIMODAL_SYSTEM_PROMPT = """You are the final decision layer of a baby monitoring system. 
 You receive: 
-1) Structured sensor outputs (YOLO detections, pose, movement, emotion)
+1) Structured sensor outputs (YOLO detections, pose, movement, emotion, face mesh, iris tracking)
 2) The actual frame image
+
+NEW CAPABILITIES:
+- Face Mesh: 468 facial landmarks, eye aspect ratio (EAR), mouth aspect ratio (MAR), head orientation, face-down detection
+- Iris Tracking: Precise eye openness, gaze direction, blinking frequency, eye-closure patterns for sleep detection
 
 TASK: Fuse all information and produce a SINGLE JSON object (no markdown) with:
 {
@@ -108,11 +112,16 @@ TASK: Fuse all information and produce a SINGLE JSON object (no markdown) with:
 
 Rules:
 - Never make up signals that sensors did not report.
+- **SLEEP DETECTION**: Use face mesh eyes_state + iris closure_pattern. If both report "closed" or "sleeping", baby is likely sleeping.
+- **CRYING DETECTION**: Use emotion + face mesh mouth_aspect_ratio. High MAR (>0.6) + emotion "crying" = high confidence crying.
+- **FACE-DOWN RISK**: If face mesh reports face_down_detected=true, set risk to "alert" and final_state to "in_unsafe_posture".
+- **BREATHING MONITORING**: Use face mesh nose_bridge_y changes across frames (if available) to detect breathing irregularities.
+- **EARLY DISTRESS**: Use iris tracking blinking frequency and gaze patterns. Abnormal blink rates or rapid eye movements may indicate distress.
 - If the baby is missing or occluded, final_state = "missing_from_frame".
 - Adult intrusion is TRUE when adult_detected and baby_detected simultaneously.
-- Unsafe posture when pose reports rolling/unusual and baby appears at risk.
+- Unsafe posture when pose reports rolling/unusual OR face mesh detects face-down.
 - Distressed includes pain, uncomfortable, or high movement with crying emotion.
-- Adjust risk: sleeping->safe, awake->monitor, crying->monitor, distressed/unsafe/adult/missing->alert.
+- Adjust risk: sleeping->safe, awake->safe, crying->monitor, distressed/unsafe/adult/missing/face-down->alert.
 - Keep JSON valid and lowercase strings as shown.
 """
 
@@ -507,6 +516,8 @@ def _local_multimodal_reasoning(fused_context: Dict[str, Any]) -> Dict[str, Any]
     pose = fused_context.get("pose_result") or {}
     movement = fused_context.get("movement_result") or {}
     emotion = fused_context.get("emotion_result") or {}
+    face_mesh = fused_context.get("face_mesh_result") or {}
+    iris_tracking = fused_context.get("iris_tracking_result") or {}
 
     baby_detected = bool(yolo.get("baby_detected") or pose.get("pose_label") in {"sleeping", "sitting", "standing"})
     adult_detected = bool(yolo.get("adult_detected"))
@@ -515,35 +526,84 @@ def _local_multimodal_reasoning(fused_context: Dict[str, Any]) -> Dict[str, Any]
     emotion_label = str(emotion.get("emotion_label", "neutral")).lower()
     movement_type = str(movement.get("movement_type", "unknown")).lower()
     sudden = movement.get("sudden_jerk", False)
+    
+    # Extract face mesh signals
+    face_detected = face_mesh.get("face_detected", False) if isinstance(face_mesh, dict) else False
+    face_down = face_mesh.get("face_down_detected", False) if isinstance(face_mesh, dict) else False
+    eyes_state_mesh = str(face_mesh.get("eyes_state", "unknown")).lower() if isinstance(face_mesh, dict) else "unknown"
+    mouth_state_mesh = str(face_mesh.get("mouth_state", "unknown")).lower() if isinstance(face_mesh, dict) else "unknown"
+    mouth_aspect_ratio = face_mesh.get("mouth_aspect_ratio", 0.0) if isinstance(face_mesh, dict) else 0.0
+    
+    # Extract iris tracking signals
+    iris_detected = iris_tracking.get("iris_detected", False) if isinstance(iris_tracking, dict) else False
+    eyes_state_iris = str(iris_tracking.get("eyes_state", "unknown")).lower() if isinstance(iris_tracking, dict) else "unknown"
+    closure_pattern = str(iris_tracking.get("closure_pattern", "unknown")).lower() if isinstance(iris_tracking, dict) else "unknown"
+    blink_freq = iris_tracking.get("blinking", {}).get("frequency_per_minute", 0.0) if isinstance(iris_tracking, dict) else 0.0
 
-    if not baby_detected:
+    # CRITICAL: Check face-down risk first
+    if face_down:
+        final_state = "in_unsafe_posture"
+        risk = "alert"
+        status_flags = ["Face-down position detected - immediate risk"]
+    elif not baby_detected:
         final_state = "missing_from_frame"
+        risk = _derive_risk(final_state)
+        status_flags = []
     elif adult_intrusion:
         final_state = "adult_intrusion"
-    elif pose_label in {"sleeping"} and emotion_label in {"neutral", "happy"} and movement_type in {"still", "micro_movement", "initializing"}:
+        risk = _derive_risk(final_state)
+        status_flags = ["Adult intrusion detected"]
+    # Improved sleep detection using face mesh + iris tracking
+    elif (eyes_state_mesh == "closed" and closure_pattern in {"sleeping", "drowsy"}) or \
+         (eyes_state_iris == "closed" and closure_pattern in {"sleeping", "drowsy"}):
         final_state = "sleeping"
+        risk = _derive_risk(final_state)
+        status_flags = ["Eyes closed", f"Closure pattern: {closure_pattern}"]
+    # Improved crying detection using face mesh + emotion
+    elif emotion_label in {"crying", "pain", "distress"} or \
+         (mouth_state_mesh == "open" and mouth_aspect_ratio > 0.6):
+        # High mouth opening + crying emotion = crying
+        if emotion_label in {"crying", "pain"} or mouth_aspect_ratio > 0.65:
+            final_state = "crying"
+        else:
+            final_state = "distressed"
+        risk = _derive_risk(final_state)
+        status_flags = [f"Emotion: {emotion_label}", f"Mouth open: MAR={mouth_aspect_ratio:.2f}"]
     elif pose_label in {"rolling", "unusual_posture"}:
         final_state = "in_unsafe_posture"
-    elif emotion_label in {"crying"}:
-        # Only crying if emotion explicitly shows crying
-        final_state = "crying"
-    elif emotion_label in {"distress", "pain"} or (emotion_label == "uncomfortable" and movement_type in {"major_movement"}):
-        # Distressed if pain/distress detected, or uncomfortable with major movement
+        risk = _derive_risk(final_state)
+        status_flags = ["Unusual posture detected"]
+    elif emotion_label in {"distress"} or (emotion_label == "uncomfortable" and movement_type in {"major_movement"}):
         final_state = "distressed"
+        risk = _derive_risk(final_state)
+        status_flags = [f"Emotion: {emotion_label}"]
+    # Detect early distress using iris tracking
+    elif blink_freq > 40:  # Abnormally high blink rate
+        final_state = "distressed"
+        risk = "monitor"
+        status_flags = [f"Abnormal blink rate: {blink_freq:.1f}/min"]
     elif sudden and emotion_label not in {"happy", "neutral"}:
-        # Sudden jerk with non-positive emotion may indicate distress
         final_state = "distressed"
+        risk = _derive_risk(final_state)
+        status_flags = ["Sudden jerk with negative emotion"]
     elif emotion_label == "happy" or (emotion_label == "neutral" and movement_type in {"active", "major_movement"}):
-        # Happy or neutral with movement = awake and active
         final_state = "awake"
+        risk = _derive_risk(final_state)
+        status_flags = []
     elif movement_type in {"still", "micro_movement"} and emotion_label in {"neutral"}:
-        # Still and neutral = possibly sleeping or calm
-        final_state = "sleeping"
+        # Check iris tracking for definitive sleep state
+        if closure_pattern == "sleeping":
+            final_state = "sleeping"
+        else:
+            final_state = "awake"
+        risk = _derive_risk(final_state)
+        status_flags = []
     else:
-        # Default to awake for any other combination
         final_state = "awake"
+        risk = _derive_risk(final_state)
+        status_flags = []
 
-    risk = _derive_risk(final_state)
+    # Build notes
     notes = []
     if emotion_label:
         notes.append(f"Emotion: {emotion_label}")
@@ -551,27 +611,31 @@ def _local_multimodal_reasoning(fused_context: Dict[str, Any]) -> Dict[str, Any]
         notes.append(f"Pose: {pose_label}")
     if movement_type:
         notes.append(f"Movement: {movement_type}")
+    if face_detected:
+        notes.append(f"Eyes: {eyes_state_mesh}, Mouth: {mouth_state_mesh}")
+    if iris_detected:
+        notes.append(f"Iris pattern: {closure_pattern}")
     if adult_intrusion:
         notes.append("Adult present with baby")
+    if face_down:
+        notes.append("⚠️ FACE-DOWN POSITION")
 
-    status_flags = []
-    if sudden:
-        status_flags.append("Sudden jerk detected")
+    # Additional status flags
     if movement.get("stillness_exceeded"):
         status_flags.append("Baby still for extended period")
-    if adult_intrusion:
-        status_flags.append("Adult intrusion detected")
+    if face_down:
+        status_flags.append("⚠️ Face-down detected")
 
     return {
         "final_state": final_state,
-        "confidence": 0.6,
+        "confidence": 0.7 if (face_detected or iris_detected) else 0.6,
         "baby_detected": baby_detected,
         "adult_detected": adult_detected,
         "adult_intrusion": adult_intrusion,
         "risk": risk,
         "movement_level": movement_type,
         "notes": " | ".join(notes) if notes else "",
-        "reasoning": "Local heuristic fusion",
+        "reasoning": "Local heuristic fusion with face mesh and iris tracking",
         "recommended_action": _recommend_action(final_state),
         "status_flags": status_flags,
         "signals_used": fused_context,

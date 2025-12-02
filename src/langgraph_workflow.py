@@ -14,10 +14,13 @@ from langgraph.graph import StateGraph
 
 from src.agents import (
     get_emotion_detector,
+    get_face_mesh_analyzer,
+    get_iris_tracker,
     get_movement_tracker,
     get_pose_analyzer,
     get_yolo_detector,
 )
+from src.config import get_settings
 from src.agent import evaluate_fused_state
 from src.audio_agent_placeholder import extract_librosa_features, classify_cry
 from src.azure_vision import analyze_multimodal_state
@@ -61,10 +64,24 @@ AGENT_METADATA: Dict[str, Dict[str, Any]] = {
         "outputs": ["emotion_result"],
         "model": "TensorFlow / Haar cascade ROI",
     },
+    "face_mesh_agent": {
+        "name": "Face Mesh Analysis Agent",
+        "purpose": "MediaPipe Face Mesh extracting 468 landmarks, eye/mouth ratios, head orientation, breathing, and face-down detection.",
+        "inputs": ["frame_bgr", "yolo_result"],
+        "outputs": ["face_mesh_result"],
+        "model": "MediaPipe Face Mesh",
+    },
+    "iris_tracking_agent": {
+        "name": "Iris Tracking Agent",
+        "purpose": "MediaPipe Iris for precise eye tracking, gaze direction, blinking frequency, and sleep detection.",
+        "inputs": ["frame_bgr", "yolo_result"],
+        "outputs": ["iris_tracking_result"],
+        "model": "MediaPipe Iris",
+    },
     "fusion_agent": {
         "name": "Azure Vision Fusion Agent",
         "purpose": "Azure GPT-4o Vision reasoning over fused structured signals plus the raw frame.",
-        "inputs": ["frame_bytes", "yolo_result", "pose_result", "movement_result", "emotion_result"],
+        "inputs": ["frame_bytes", "yolo_result", "pose_result", "movement_result", "emotion_result", "face_mesh_result", "iris_tracking_result"],
         "outputs": ["fusion_result"],
         "model": "Azure OpenAI GPT-4o",
     },
@@ -96,6 +113,8 @@ class WorkflowState(TypedDict, total=False):
     pose_result: Optional[Dict[str, Any]]
     movement_result: Optional[Dict[str, Any]]
     emotion_result: Optional[Dict[str, Any]]
+    face_mesh_result: Optional[Dict[str, Any]]
+    iris_tracking_result: Optional[Dict[str, Any]]
     fused_context: Dict[str, Any]
     fusion_result: Optional[Dict[str, Any]]
     decision_result: Optional[Dict[str, Any]]
@@ -170,6 +189,8 @@ def _build_fused_context(state: WorkflowState) -> Dict[str, Any]:
         "pose_result": state.get("pose_result"),
         "movement_result": state.get("movement_result"),
         "emotion_result": state.get("emotion_result"),
+        "face_mesh_result": state.get("face_mesh_result"),
+        "iris_tracking_result": state.get("iris_tracking_result"),
         "audio_result": state.get("audio_result"),
     }
 
@@ -289,6 +310,117 @@ def emotion_agent_node(state: WorkflowState) -> WorkflowState:
         state.setdefault("errors", []).append(err)
         state["emotion_result"] = {"error": str(exc), "emotion_label": "neutral"}
         log_agent_output(agent, state, success=False)
+    return state
+
+
+def face_mesh_agent_node(state: WorkflowState) -> WorkflowState:
+    agent = "face_mesh_agent"
+    log_agent_input(agent, state)
+    
+    # Check if Face Mesh is enabled
+    settings = get_settings()
+    if not settings.ENABLE_FACE_MESH:
+        state["face_mesh_result"] = {
+            "enabled": False,
+            "reason": "Face Mesh disabled in settings"
+        }
+        print("  ⚠️  Face Mesh detection disabled in configuration")
+        log_agent_output(agent, state)
+        return state
+    
+    try:
+        frame = state.get("frame_bgr")
+        if frame is None:
+            raise ValueError("No decoded frame available for face mesh analysis")
+        
+        # Only run if baby detected by YOLO
+        yolo = state.get("yolo_result") or {}
+        baby_detected = yolo.get("baby_detected", False) if isinstance(yolo, dict) else False
+        
+        if not baby_detected:
+            state["face_mesh_result"] = {
+                "skipped": True,
+                "reason": "No baby detected by YOLO - skipping face mesh analysis"
+            }
+            print("  ⏭️  Skipping face mesh: no baby detected")
+            log_agent_output(agent, state)
+            return state
+        
+        focus = yolo.get("primary_baby_box") if isinstance(yolo, dict) else None
+        analyzer = get_face_mesh_analyzer()
+        result = analyzer.analyze(frame, focus_box=focus)
+        state["face_mesh_result"] = result
+        
+        # Log key findings
+        if result.get("face_detected"):
+            print(f"  ✅ Face mesh detected: {result.get('landmarks_count')} landmarks")
+            print(f"     Eyes: {result.get('eyes_state')}, Mouth: {result.get('mouth_state')}")
+            if result.get("face_down_detected"):
+                print(f"     ⚠️  Face-down position detected!")
+        
+        log_agent_output(agent, state, success=result.get("model_loaded", True))
+    except Exception as exc:  # noqa: BLE001
+        err = f"face_mesh_agent: {exc}"
+        state.setdefault("errors", []).append(err)
+        state["face_mesh_result"] = {"error": str(exc), "face_detected": False}
+        log_agent_output(agent, state, success=False)
+    return state
+
+
+def iris_tracking_agent_node(state: WorkflowState) -> WorkflowState:
+    agent = "iris_tracking_agent"
+    log_agent_input(agent, state)
+    
+    # Check if Iris Tracking is enabled
+    settings = get_settings()
+    if not settings.ENABLE_IRIS_TRACKING:
+        state["iris_tracking_result"] = {
+            "enabled": False,
+            "reason": "Iris tracking disabled in settings"
+        }
+        print("  ⚠️  Iris tracking disabled in configuration")
+        log_agent_output(agent, state)
+        return state
+    
+    try:
+        frame = state.get("frame_bgr")
+        if frame is None:
+            raise ValueError("No decoded frame available for iris tracking")
+        
+        # Only run if baby detected by YOLO
+        yolo = state.get("yolo_result") or {}
+        baby_detected = yolo.get("baby_detected", False) if isinstance(yolo, dict) else False
+        
+        if not baby_detected:
+            state["iris_tracking_result"] = {
+                "skipped": True,
+                "reason": "No baby detected by YOLO - skipping iris tracking"
+            }
+            print("  ⏭️  Skipping iris tracking: no baby detected")
+            log_agent_output(agent, state)
+            return state
+        
+        focus = yolo.get("primary_baby_box") if isinstance(yolo, dict) else None
+        tracker = get_iris_tracker()
+        result = tracker.analyze(frame, focus_box=focus)
+        state["iris_tracking_result"] = result
+        
+        # Log key findings
+        if result.get("iris_detected"):
+            eyes = result.get("eyes_state", "unknown")
+            closure_pattern = result.get("closure_pattern", "unknown")
+            blink_freq = result.get("blinking", {}).get("frequency_per_minute", 0)
+            print(f"  ✅ Iris tracking: Eyes {eyes}, Pattern: {closure_pattern}")
+            print(f"     Blink frequency: {blink_freq:.1f}/min")
+            if closure_pattern == "sleeping":
+                print(f"     😴 Sleep pattern detected")
+        
+        log_agent_output(agent, state, success=result.get("model_loaded", True))
+    except Exception as exc:  # noqa: BLE001
+        err = f"iris_tracking_agent: {exc}"
+        state.setdefault("errors", []).append(err)
+        state["iris_tracking_result"] = {"error": str(exc), "iris_detected": False}
+        log_agent_output(agent, state, success=False)
     finally:
         # Release frame to reduce memory pressure; remaining steps use frame_bytes.
         state["frame_bgr"] = None
@@ -349,6 +481,8 @@ def logger_agent_node(state: WorkflowState) -> WorkflowState:
             "movement": movement,
             "emotion": state.get("emotion_result"),
             "yolo": state.get("yolo_result"),
+            "face_mesh": state.get("face_mesh_result"),
+            "iris_tracking": state.get("iris_tracking_result"),
         }
         if state.get("frame_path"):
             with get_session() as session:
@@ -396,15 +530,20 @@ def create_baby_monitor_workflow():
     graph.add_node("pose_agent", pose_agent_node)
     graph.add_node("movement_agent", movement_agent_node)
     graph.add_node("emotion_agent", emotion_agent_node)
+    graph.add_node("face_mesh_agent", face_mesh_agent_node)
+    graph.add_node("iris_tracking_agent", iris_tracking_agent_node)
     graph.add_node("fusion_agent", fusion_agent_node)
     graph.add_node("alert_agent", alert_agent_node)
     graph.add_node("logger_agent", logger_agent_node)
 
+    # Pipeline: camera → YOLO → pose → movement → emotion → face_mesh → iris → fusion → alert → logger
     graph.add_edge("camera_input", "yolo_agent")
     graph.add_edge("yolo_agent", "pose_agent")
     graph.add_edge("pose_agent", "movement_agent")
     graph.add_edge("movement_agent", "emotion_agent")
-    graph.add_edge("emotion_agent", "fusion_agent")
+    graph.add_edge("emotion_agent", "face_mesh_agent")
+    graph.add_edge("face_mesh_agent", "iris_tracking_agent")
+    graph.add_edge("iris_tracking_agent", "fusion_agent")
     graph.add_edge("fusion_agent", "alert_agent")
     graph.add_edge("alert_agent", "logger_agent")
 
@@ -428,6 +567,8 @@ def run(frame_bytes: Optional[bytes] = None, audio_bytes: Optional[bytes] = None
         "pose_result": None,
         "movement_result": None,
         "emotion_result": None,
+        "face_mesh_result": None,
+        "iris_tracking_result": None,
         "fusion_result": None,
         "decision_result": None,
         "alert_result": None,

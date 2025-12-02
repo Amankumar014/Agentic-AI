@@ -65,6 +65,24 @@ class Settings(BaseSettings):
     YOLO_MODEL_PATH: str = "yolov8n.pt"
     EMOTION_MODEL_PATH: str = "ml_models/best_model.h5"
     
+    # Face Mesh and Iris Tracking Settings
+    ENABLE_FACE_MESH: bool = True  # Enable MediaPipe Face Mesh detection
+    ENABLE_IRIS_TRACKING: bool = True  # Enable MediaPipe Iris tracking
+    
+    # Pose Estimation Settings
+    ENABLE_POSE_ESTIMATION: bool = True  # Enable MediaPipe Pose estimation
+    
+    # Emotion Detection Settings
+    ENABLE_EMOTION_DETECTION: bool = True  # Enable emotion detection model
+    
+    # Annotated Video Visualization Settings
+    ANNOTATED_STREAM_DRAW_BBOXES: bool = True  # Draw bounding boxes
+    ANNOTATED_STREAM_DRAW_POSE: bool = True  # Draw pose skeleton
+    ANNOTATED_STREAM_DRAW_FACE_MESH: bool = True  # Draw face mesh
+    ANNOTATED_STREAM_DRAW_IRIS: bool = True  # Draw iris tracking
+    ANNOTATED_STREAM_DRAW_LABELS: bool = True  # Draw text labels
+    ANNOTATED_STREAM_DRAW_STATUS: bool = True  # Draw status overlay
+    
     # Movement Tracking Thresholds
     MOVEMENT_STILL_THRESHOLD: float = 0.35
     MOVEMENT_MICRO_THRESHOLD: float = 0.85

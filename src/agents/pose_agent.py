@@ -51,7 +51,8 @@ class PoseAnalyzer:
             }
 
         roi = frame_bgr
-        if focus_box:
+        offset_x, offset_y = 0, 0
+        if focus_box and "bbox" in focus_box:
             x1, y1, x2, y2 = (
                 int(focus_box["bbox"][0]),
                 int(focus_box["bbox"][1]),
@@ -63,8 +64,12 @@ class PoseAnalyzer:
             x2 = min(x2 + 20, frame_bgr.shape[1] - 1)
             y2 = min(y2 + 20, frame_bgr.shape[0] - 1)
             roi = frame_bgr[y1:y2, x1:x2]
+            offset_x, offset_y = x1, y1
             if roi.size == 0:
                 roi = frame_bgr
+                offset_x, offset_y = 0, 0
+
+        roi_h, roi_w = roi.shape[:2]
 
         frame_rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
         result = self._pose.process(frame_rgb)
@@ -79,16 +84,18 @@ class PoseAnalyzer:
             }
 
         landmarks = result.pose_landmarks.landmark
-        keypoints = [
-            {
+        keypoints = []
+        for i, pt in enumerate(landmarks):
+            kp = {
                 "name": self._landmarks_enum(i).name.lower(),
                 "x": round(pt.x, 4),
                 "y": round(pt.y, 4),
                 "z": round(pt.z, 4),
                 "visibility": round(pt.visibility, 4),
             }
-            for i, pt in enumerate(landmarks)
-        ]
+            kp["x_px"] = int(pt.x * roi_w) + offset_x
+            kp["y_px"] = int(pt.y * roi_h) + offset_y
+            keypoints.append(kp)
 
         label, confidence, reason = self._classify_posture(landmarks)
 
@@ -98,6 +105,12 @@ class PoseAnalyzer:
             "confidence": round(confidence, 4),
             "reason": reason,
             "keypoints": keypoints,
+            "roi": {
+                "offset_x": offset_x,
+                "offset_y": offset_y,
+                "width": roi_w,
+                "height": roi_h,
+            },
         }
 
     def _classify_posture(self, landmarks) -> tuple[str, float, str]:
