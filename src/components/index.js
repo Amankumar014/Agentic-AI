@@ -5,6 +5,7 @@ export { default as VideoFeed } from './common/VideoFeed';
 export { default as DailySummaryCard } from './common/DailySummaryCard';
 export { default as ActivityItem } from './common/ActivityItem';
 export { default as Chatbot } from './common/Chatbot';
+export { default as DetectionLegend } from './common/DetectionLegend';
 
 // Layout Components
 export { default as NavSidebar } from './layout/NavSidebar';

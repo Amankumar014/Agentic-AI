@@ -281,12 +281,27 @@ export function getBaseUrl() {
  */
 
 /**
- * Get MJPEG stream URL
+ * Get MJPEG stream URL (raw video feed)
  * The stream endpoint provides Motion JPEG video that can be displayed in an <img> tag
- * @returns {string} - Full URL to the MJPEG stream endpoint
+ * @returns {string} - Full URL to the raw MJPEG stream endpoint
  */
 export function getStreamUrl() {
   return `${BASE_URL}/api/v1/stream/`;
+}
+
+/**
+ * Get annotated MJPEG stream URL (with detection overlays)
+ * The annotated stream includes real-time detection visualizations:
+ * - Green pose skeleton lines (33 keypoints)
+ * - Magenta face mesh lines (468 points)
+ * - Cyan iris tracking markers
+ * - Yellow bounding boxes (babies)
+ * - Orange bounding boxes (adults)
+ * - Status overlay bar with alerts and state
+ * @returns {string} - Full URL to the annotated MJPEG stream endpoint
+ */
+export function getAnnotatedStreamUrl() {
+  return `${BASE_URL}/api/v1/stream/annotated/`;
 }
 
 // Export all functions as default object as well
@@ -304,6 +319,7 @@ const ApiService = {
   isFileSizeError,
   getBaseUrl,
   getStreamUrl,
+  getAnnotatedStreamUrl,
 };
 
 export default ApiService;

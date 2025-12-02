@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { VideoFeed, StatusCard } from '../components';
+import { VideoFeed, StatusCard, DetectionLegend } from '../components';
 import wsService from '../services/WebSocketService';
-import { uploadFrame, uploadFrameWithAudio, formatErrorMessage, getStreamUrl } from '../services/ApiService';
+import { uploadFrame, uploadFrameWithAudio, formatErrorMessage, getStreamUrl, getAnnotatedStreamUrl } from '../services/ApiService';
 
 /**
  * LiveFeed Page - Dedicated live camera feed monitoring
@@ -15,6 +15,8 @@ function LiveFeed({ config }) {
     lastUpdate: null
   });
 
+  const [showAnnotations, setShowAnnotations] = useState(true);
+  
   const [cameraControls, setCameraControls] = useState({
     zoom: 1,
     brightness: 100,
@@ -227,8 +229,10 @@ function LiveFeed({ config }) {
           {/* Enhanced Video Feed */}
           <div className="bg-white rounded-2xl overflow-hidden shadow-soft">
             <VideoFeed
-              cameraUrl={getStreamUrl()}
+              cameraUrl={showAnnotations ? getAnnotatedStreamUrl() : getStreamUrl()}
               label={config?.camera_label || 'Nursery Camera'}
+              showAnnotations={showAnnotations}
+              onToggleAnnotations={() => setShowAnnotations(!showAnnotations)}
             />
             
             {/* Camera Controls Overlay */}
@@ -293,6 +297,9 @@ function LiveFeed({ config }) {
               </div>
             </div>
           </div>
+
+          {/* Detection Legend */}
+          {showAnnotations && <DetectionLegend />}
 
           {/* Frame Upload & Analysis */}
           <div className="bg-white rounded-2xl p-6 shadow-soft">
@@ -489,4 +496,3 @@ function LiveFeed({ config }) {
 }
 
 export default LiveFeed;
-

@@ -4,10 +4,11 @@ import {
   VideoFeed,
   AlertCard,
   DailySummaryCard,
-  ActivityItem
+  ActivityItem,
+  DetectionLegend
 } from '../components';
 import wsService from '../services/WebSocketService';
-import { getStats, getAlerts, getStreamUrl } from '../services/ApiService';
+import { getStats, getAlerts, getStreamUrl, getAnnotatedStreamUrl } from '../services/ApiService';
 
 /**
  * Dashboard Page - Main monitoring dashboard with real-time updates
@@ -24,6 +25,7 @@ function Dashboard({ config }) {
   const [recentAlerts, setRecentAlerts] = useState([]);
   const [statsData, setStatsData] = useState(null);
   const [statsError, setStatsError] = useState(null);
+  const [showAnnotations, setShowAnnotations] = useState(true);
 
   const [dailySummary, setDailySummary] = useState({
     sleepHours: { value: '8.5h', change: 12 },
@@ -204,9 +206,14 @@ function Dashboard({ config }) {
         <div className="lg:col-span-2 space-y-6">
           {/* Video Feed */}
           <VideoFeed
-            cameraUrl={getStreamUrl()}
+            cameraUrl={showAnnotations ? getAnnotatedStreamUrl() : getStreamUrl()}
             label={config.camera_label || 'Nursery Camera'}
+            showAnnotations={showAnnotations}
+            onToggleAnnotations={() => setShowAnnotations(!showAnnotations)}
           />
+
+          {/* Detection Legend */}
+          {showAnnotations && <DetectionLegend />}
 
           {/* Daily Summary */}
           <div className="bg-white rounded-2xl p-6 shadow-soft">
@@ -386,4 +393,3 @@ function Dashboard({ config }) {
 }
 
 export default Dashboard;
-
