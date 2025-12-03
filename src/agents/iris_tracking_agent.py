@@ -145,8 +145,12 @@ class IrisTracker:
         )
 
         # Determine if eyes are closed/open
-        eyes_closed = avg_eye_openness < 0.15
-        eyes_open = avg_eye_openness > 0.22
+        # Adjusted thresholds for better detection:
+        # - Eyes are considered closed if openness < 0.20 (was 0.15)
+        # - Eyes are considered open if openness > 0.30 (was 0.22)
+        # - Between 0.20-0.30 is partially_open
+        eyes_closed = avg_eye_openness < 0.30
+        eyes_open = avg_eye_openness > 0.40
         
         # Track blink events
         current_time = time.time()
@@ -170,6 +174,11 @@ class IrisTracker:
         left_iris_y = int(left_iris_center.y * roi_h) + offset_y
         right_iris_x = int(right_iris_center.x * roi_w) + offset_x
         right_iris_y = int(right_iris_center.y * roi_h) + offset_y
+        
+        # Debug logging for eye state detection
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Iris: openness={avg_eye_openness:.3f}, eyes={('open' if eyes_open else ('closed' if eyes_closed else 'partial'))}, pattern={closure_pattern}")
 
         return {
             "model_loaded": True,

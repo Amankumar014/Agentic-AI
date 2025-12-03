@@ -132,8 +132,12 @@ class FaceMeshAnalyzer:
         face_down = self._detect_face_down(landmarks)
 
         # Determine eye state
-        eyes_closed = avg_ear < 0.18  # Threshold for closed eyes
-        eyes_open = avg_ear > 0.25
+        # Adjusted thresholds for better detection:
+        # - Eyes are considered closed if EAR < 0.20 (was 0.18)
+        # - Eyes are considered open if EAR > 0.28 (was 0.25)
+        # - Between 0.20-0.28 is partially_open
+        eyes_closed = avg_ear < 0.30  # Threshold for closed eyes
+        eyes_open = avg_ear > 0.33
         mouth_open = mar > 0.5
 
         return {

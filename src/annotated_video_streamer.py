@@ -12,6 +12,11 @@ import logging
 from typing import Optional, Dict, Any, Tuple, List
 from dataclasses import dataclass
 
+try:
+    import mediapipe as mp
+except Exception:
+    mp = None
+
 from src.camera_streamer import get_camera_streamer
 from src.agents import (
     get_yolo_detector,
@@ -231,7 +236,7 @@ class AnnotatedVideoStreamer:
                           COLOR_POSE_SKELETON, -1)
     
     def _draw_face_mesh(self, frame: np.ndarray, face_mesh_result: Dict[str, Any], focus_box: Optional[Dict[str, Any]] = None):
-        """Draw face mesh landmarks."""
+        """Draw face mesh landmarks with tesselation."""
         if not self.config.draw_face_mesh or not face_mesh_result.get("face_detected"):
             return
         
@@ -239,7 +244,26 @@ class AnnotatedVideoStreamer:
         if not landmarks or len(landmarks) == 0:
             return
         
-        # Draw subset of face mesh landmarks (all 468 would be too cluttered)
+        # Draw FACEMESH_TESSELATION first (the triangular mesh covering the face)
+        if mp is not None and hasattr(mp.solutions.face_mesh, 'FACEMESH_TESSELATION'):
+            tesselation_color = (128, 128, 128)  # Gray color for subtle appearance
+            for connection in mp.solutions.face_mesh.FACEMESH_TESSELATION:
+                start_idx = connection[0]
+                end_idx = connection[1]
+                
+                if start_idx < len(landmarks) and end_idx < len(landmarks):
+                    start = landmarks[start_idx]
+                    end = landmarks[end_idx]
+                    
+                    start_x = int(start["x"])
+                    start_y = int(start["y"])
+                    end_x = int(end["x"])
+                    end_y = int(end["y"])
+                    
+                    # Draw thin line for tesselation
+                    cv2.line(frame, (start_x, start_y), (end_x, end_y), tesselation_color, 1)
+        
+        # Draw subset of face mesh landmarks on top for emphasis
         # We'll draw:
         # - Face contour
         # - Eyes
@@ -399,8 +423,23 @@ class AnnotatedVideoStreamer:
             info_items.append(f"Pose: {summary.get('pose', 'unknown')}")
         if summary.get('emotion') != 'unknown':
             info_items.append(f"Emotion: {summary.get('emotion', 'unknown')}")
-        if summary.get('eyes_state') != 'unknown':
-            info_items.append(f"Eyes: {summary.get('eyes_state', 'unknown')}")
+        
+        # Show eye state with appropriate emoji
+        eyes_state = summary.get('eyes_state', 'unknown')
+        if eyes_state != 'unknown':
+            if eyes_state == 'sleeping':
+                info_items.append(f"😴 Sleeping")
+            elif eyes_state == 'awake':
+                info_items.append(f"👁 Awake")
+            elif eyes_state == 'drowsy':
+                info_items.append(f"😪 Drowsy")
+            else:
+                info_items.append(f"Eyes: {eyes_state}")
+        
+        # Show eye openness for debugging if available
+        if summary.get('eye_openness') is not None:
+            eye_openness = summary.get('eye_openness')
+            info_items.append(f"EO: {eye_openness:.2f}")
         
         x_offset = 200
         for item in info_items:
@@ -495,7 +534,12 @@ class AnnotatedVideoStreamer:
                     if (not face_mesh_result.get("face_detected")) and focus_box:
                         face_mesh_result = self._face_mesh.analyze(frame_bgr, None)
                     detections["face_mesh"] = face_mesh_result
-                    detections["summary"]["eyes_state"] = face_mesh_result.get("eyes_state", "unknown")
+                    
+                    # Store initial eye state from face mesh (will be overridden by combined state if iris available)
+                    if face_mesh_result.get("face_detected"):
+                        detections["summary"]["eyes_state"] = face_mesh_result.get("eyes_state", "unknown")
+                        logger.debug(f"Face mesh detected - eyes: {face_mesh_result.get('eyes_state')}, EAR: {face_mesh_result.get('eye_aspect_ratio', {}).get('average', 'N/A')}")
+                    
                     detections["summary"]["face_down"] = face_mesh_result.get("face_down_detected", False)
                     
                     # Draw face mesh
@@ -511,6 +555,11 @@ class AnnotatedVideoStreamer:
                         iris_result = self._iris.analyze(frame_bgr, None)
                     detections["iris_tracking"] = iris_result
                     
+                    if iris_result.get("iris_detected"):
+                        logger.debug(f"Iris detected - eyes: {iris_result.get('eyes_state')}, "
+                                   f"openness: {iris_result.get('eye_openness', {}).get('average', 'N/A')}, "
+                                   f"pattern: {iris_result.get('closure_pattern', 'N/A')}")
+                    
                     # Draw iris tracking
                     self._draw_iris_tracking(frame_bgr, iris_result, focus_box)
                     
@@ -520,6 +569,19 @@ class AnnotatedVideoStreamer:
                         detections.get("face_mesh"),
                         iris_result
                     )
+                    
+                    # Update summary with combined state if available
+                    combined_state = detections["combined_facial_state"]
+                    if combined_state.get("available"):
+                        # Use the closure pattern from iris tracking for better state detection
+                        likely_state = combined_state.get("likely_state", "unknown")
+                        detections["summary"]["eyes_state"] = likely_state
+                        
+                        # Also add raw eye openness info
+                        detections["summary"]["eye_openness"] = iris_result.get("eye_openness", {}).get("average", 0)
+                        
+                        logger.debug(f"Combined facial state - likely state: {likely_state}, "
+                                   f"eye_openness: {detections['summary']['eye_openness']:.3f}")
                 except Exception as e:
                     logger.error(f"Iris tracking error: {e}")
             
@@ -543,29 +605,60 @@ class AnnotatedVideoStreamer:
             "face_down_risk": False,
         }
         
-        if not face_mesh_result or not iris_result:
+        # Need at least one facial detection method to work
+        has_iris = iris_result and iris_result.get("iris_detected")
+        has_face_mesh = face_mesh_result and face_mesh_result.get("face_detected")
+        
+        if not has_iris and not has_face_mesh:
             return state
         
         state["available"] = True
-        state["eyes_mesh"] = face_mesh_result.get("eyes_state", "unknown")
-        state["eyes_iris"] = iris_result.get("eyes_state", "unknown")
-        state["closure_pattern"] = iris_result.get("closure_pattern", "unknown")
         
-        # Determine likely state
-        if iris_result.get("closure_pattern") == "sleeping":
-            state["likely_state"] = "sleeping"
-        elif iris_result.get("closure_pattern") == "drowsy":
-            state["likely_state"] = "drowsy"
-        else:
-            state["likely_state"] = "awake"
+        # Get eye states from available sources
+        if has_face_mesh:
+            state["eyes_mesh"] = face_mesh_result.get("eyes_state", "unknown")
+        
+        if has_iris:
+            state["eyes_iris"] = iris_result.get("eyes_state", "unknown")
+            state["closure_pattern"] = iris_result.get("closure_pattern", "unknown")
+        
+        # Determine likely state (prioritize iris tracker as it's more accurate for sleep detection)
+        if has_iris:
+            closure_pattern = iris_result.get("closure_pattern", "unknown")
+            if closure_pattern == "sleeping":
+                state["likely_state"] = "sleeping"
+            elif closure_pattern == "drowsy":
+                state["likely_state"] = "drowsy"
+            elif closure_pattern == "blinking":
+                state["likely_state"] = "awake"
+            elif closure_pattern == "awake":
+                state["likely_state"] = "awake"
+            else:
+                # Fallback to raw eye state
+                eye_state = iris_result.get("eyes_state", "unknown")
+                if eye_state == "closed":
+                    state["likely_state"] = "sleeping"
+                elif eye_state == "open":
+                    state["likely_state"] = "awake"
+                else:
+                    state["likely_state"] = "drowsy"
+        elif has_face_mesh:
+            # Fallback to face mesh eye state if iris not available
+            eye_state = face_mesh_result.get("eyes_state", "unknown")
+            if eye_state == "closed":
+                state["likely_state"] = "sleeping"
+            elif eye_state == "open":
+                state["likely_state"] = "awake"
+            else:
+                state["likely_state"] = "drowsy"
         
         # Check crying indicators
-        if emotion_result:
+        if emotion_result and emotion_result.get("emotion_label"):
             emotion = emotion_result.get("emotion_label", "")
             if emotion in ["crying", "pain", "distress"]:
                 state["crying_indicators"].append(f"emotion_{emotion}")
         
-        if face_mesh_result:
+        if has_face_mesh:
             mar = face_mesh_result.get("mouth_aspect_ratio", 0)
             if mar > 0.6:
                 state["crying_indicators"].append("mouth_wide_open")
@@ -573,7 +666,8 @@ class AnnotatedVideoStreamer:
         state["likely_crying"] = len(state["crying_indicators"]) > 0
         
         # Face-down risk
-        state["face_down_risk"] = face_mesh_result.get("face_down_detected", False)
+        if has_face_mesh:
+            state["face_down_risk"] = face_mesh_result.get("face_down_detected", False)
         
         return state
     

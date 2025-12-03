@@ -227,7 +227,7 @@ class DetectionBroadcaster:
             emotion_result = emotion_detector.infer(frame_bgr, baby_box=focus_box)
             results["emotion"] = emotion_result
             
-            # 5. Face Mesh Analysis (run when any person is detected)
+            # 5. Face Mesh Analysis (always run - MediaPipe can detect faces even if YOLO misses person)
             if self.settings.ENABLE_FACE_MESH:
                 face_mesh_analyzer = get_face_mesh_analyzer()
                 face_mesh_result = face_mesh_analyzer.analyze(frame_bgr, focus_box=focus_box if person_detected else None)
@@ -238,7 +238,7 @@ class DetectionBroadcaster:
                     "reason": "Face mesh disabled"
                 }
             
-            # 6. Iris Tracking (run when any person is detected)
+            # 6. Iris Tracking (always run - MediaPipe can detect faces even if YOLO misses person)
             if self.settings.ENABLE_IRIS_TRACKING:
                 iris_tracker = get_iris_tracker()
                 iris_tracking_result = iris_tracker.analyze(frame_bgr, focus_box=focus_box if person_detected else None)
@@ -249,13 +249,12 @@ class DetectionBroadcaster:
                     "reason": "Iris tracking disabled"
                 }
             
-            # 7. Combined facial state (if face mesh/iris available)
-            if person_detected:
-                results["combined_facial_state"] = self._build_combined_facial_state(
-                    results.get("emotion"),
-                    results.get("face_mesh"),
-                    results.get("iris_tracking")
-                )
+            # 7. Combined facial state (always build if face mesh/iris detect anything)
+            results["combined_facial_state"] = self._build_combined_facial_state(
+                results.get("emotion"),
+                results.get("face_mesh"),
+                results.get("iris_tracking")
+            )
             
             # 8. Overall summary
             results["summary"] = self._build_summary(results)
@@ -270,31 +269,54 @@ class DetectionBroadcaster:
         """Build combined facial state from multiple sources."""
         combined = {"available": False}
         
-        if not emotion_result and not face_mesh_result and not iris_result:
+        # Need at least one facial detection method
+        has_iris = iris_result and isinstance(iris_result, dict) and iris_result.get("iris_detected")
+        has_face_mesh = face_mesh_result and isinstance(face_mesh_result, dict) and face_mesh_result.get("face_detected")
+        
+        if not has_iris and not has_face_mesh:
             return combined
         
         combined["available"] = True
         
-        # Eyes state
-        eyes_closed_count = 0
-        if face_mesh_result and isinstance(face_mesh_result, dict):
-            if face_mesh_result.get("eyes_state") == "closed":
-                eyes_closed_count += 1
-                combined["eyes_mesh"] = "closed"
+        # Store individual detection results
+        if has_face_mesh:
+            combined["eyes_mesh"] = face_mesh_result.get("eyes_state", "unknown")
+            combined["eye_aspect_ratio"] = face_mesh_result.get("eye_aspect_ratio", {}).get("average", 0.0)
         
-        if iris_result and isinstance(iris_result, dict):
-            if iris_result.get("eyes_state") == "closed":
-                eyes_closed_count += 1
-                combined["eyes_iris"] = "closed"
+        if has_iris:
+            combined["eyes_iris"] = iris_result.get("eyes_state", "unknown")
             combined["closure_pattern"] = iris_result.get("closure_pattern", "unknown")
+            combined["eye_openness"] = iris_result.get("eye_openness", {}).get("average", 0.0)
         
-        # Determine likely state
-        if eyes_closed_count >= 2:
-            combined["likely_state"] = "sleeping"
-        elif eyes_closed_count == 1:
-            combined["likely_state"] = "drowsy"
+        # Determine likely state (prioritize iris tracker's closure pattern as it's more accurate)
+        if has_iris:
+            closure_pattern = iris_result.get("closure_pattern", "unknown")
+            if closure_pattern == "sleeping":
+                combined["likely_state"] = "sleeping"
+            elif closure_pattern == "drowsy":
+                combined["likely_state"] = "drowsy"
+            elif closure_pattern in ["awake", "blinking"]:
+                combined["likely_state"] = "awake"
+            else:
+                # Fallback to raw eye state if closure pattern insufficient
+                eye_state = iris_result.get("eyes_state", "unknown")
+                if eye_state == "closed":
+                    combined["likely_state"] = "sleeping"
+                elif eye_state == "open":
+                    combined["likely_state"] = "awake"
+                else:
+                    combined["likely_state"] = "drowsy"
+        elif has_face_mesh:
+            # Fallback to face mesh if iris not available
+            eye_state = face_mesh_result.get("eyes_state", "unknown")
+            if eye_state == "closed":
+                combined["likely_state"] = "sleeping"
+            elif eye_state == "open":
+                combined["likely_state"] = "awake"
+            else:
+                combined["likely_state"] = "drowsy"
         else:
-            combined["likely_state"] = "awake"
+            combined["likely_state"] = "unknown"
         
         # Crying detection
         crying_indicators = []
@@ -302,7 +324,7 @@ class DetectionBroadcaster:
             if emotion_result.get("emotion_label") in ["crying", "distress", "pain"]:
                 crying_indicators.append("emotion")
         
-        if face_mesh_result and isinstance(face_mesh_result, dict):
+        if has_face_mesh:
             mar = face_mesh_result.get("mouth_aspect_ratio", 0.0)
             if mar > 0.6:
                 crying_indicators.append("mouth_open")
@@ -311,8 +333,10 @@ class DetectionBroadcaster:
         combined["likely_crying"] = len(crying_indicators) > 0
         
         # Face-down risk
-        if face_mesh_result and isinstance(face_mesh_result, dict):
+        if has_face_mesh:
             combined["face_down_risk"] = face_mesh_result.get("face_down_detected", False)
+        else:
+            combined["face_down_risk"] = False
         
         return combined
     

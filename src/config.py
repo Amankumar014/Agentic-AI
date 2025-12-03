@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     MOVEMENT_STILLNESS_ALERT_SECONDS: int = 60
     
     # Camera Streaming Settings
-    CAMERA_INDEX: int = 0  # Default camera device index
+    CAMERA_INDEX: int = 1  # Default camera device index
     STREAM_FPS: int = 15  # Frames per second for streaming
     STREAM_JPEG_QUALITY: int = 85  # JPEG quality (1-100, higher = better quality but larger size)
     STREAM_MAX_WIDTH: int = 1280  # Maximum width for streaming (0 = no limit) 1280 default
