@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
 
+from src.config import get_settings
+
 try:
     import mediapipe as mp  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -131,13 +133,10 @@ class FaceMeshAnalyzer:
         visibility_score = self._calculate_face_visibility(landmarks)
         face_down = self._detect_face_down(landmarks)
 
-        # Determine eye state
-        # Adjusted thresholds for better detection:
-        # - Eyes are considered closed if EAR < 0.20 (was 0.18)
-        # - Eyes are considered open if EAR > 0.28 (was 0.25)
-        # - Between 0.20-0.28 is partially_open
-        eyes_closed = avg_ear < 0.30  # Threshold for closed eyes
-        eyes_open = avg_ear > 0.33
+        # Determine eye state using configurable thresholds
+        settings = get_settings()
+        eyes_closed = avg_ear < settings.EYE_CLOSED_THRESHOLD
+        eyes_open = avg_ear > settings.EYE_OPEN_THRESHOLD
         mouth_open = mar > 0.5
 
         return {

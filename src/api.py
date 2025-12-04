@@ -642,7 +642,8 @@ async def stream_annotated_video(request: Request):
     
     async def generate_frames():
         """Generate MJPEG frames with annotations."""
-        frame_delay = 0.1  # ~10 FPS for annotated stream
+        # NOTE: Don't add delay here - the annotated streamer already controls frame rate
+        # Adding delay here causes double-buffering and increases lag
         
         try:
             while True:
@@ -654,8 +655,8 @@ async def stream_annotated_video(request: Request):
                 frame_bytes = streamer.get_frame()
                 
                 if frame_bytes is None:
-                    # No frame available yet, wait and retry
-                    await asyncio.sleep(0.1)
+                    # No frame available yet, wait briefly and retry
+                    await asyncio.sleep(0.05)  # Short wait only when no frame available
                     continue
                 
                 # Send frame in MJPEG format
@@ -669,8 +670,9 @@ async def stream_annotated_video(request: Request):
                 
                 yield frame_data
                 
-                # Control frame rate
-                await asyncio.sleep(frame_delay)
+                # Small yield to prevent CPU spinning, but don't add frame delay
+                # The annotation loop already controls the frame rate
+                await asyncio.sleep(0.01)  # Just yield CPU, not rate limiting
         
         except asyncio.CancelledError:
             pass

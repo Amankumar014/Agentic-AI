@@ -79,9 +79,23 @@ class Settings(BaseSettings):
     ANNOTATED_STREAM_DRAW_BBOXES: bool = True  # Draw bounding boxes
     ANNOTATED_STREAM_DRAW_POSE: bool = True  # Draw pose skeleton
     ANNOTATED_STREAM_DRAW_FACE_MESH: bool = True  # Draw face mesh
+    ANNOTATED_STREAM_DRAW_FACE_MESH_TESSELATION: bool = True  # Draw full face mesh triangulation (EXPENSIVE!)
     ANNOTATED_STREAM_DRAW_IRIS: bool = True  # Draw iris tracking
     ANNOTATED_STREAM_DRAW_LABELS: bool = True  # Draw text labels
     ANNOTATED_STREAM_DRAW_STATUS: bool = True  # Draw status overlay
+    
+    # Annotated Stream Performance Settings
+    ANNOTATED_STREAM_FPS: int = 15  # Target FPS for annotated stream (should match raw stream for minimal lag)
+    ANNOTATED_STREAM_DETECTION_SKIP_FRAMES: int = 2  # Run heavy detections every N frames (1=no skip, 2=every other, 3=every third)
+    # Note: YOLO always runs on every frame for responsive tracking, regardless of skip setting
+    
+    # Landmark Smoothing (reduces jitter when stationary)
+    ANNOTATED_STREAM_LANDMARK_SMOOTHING: float = 0.3  # 0.0=no smoothing, 1.0=no filtering (0.2-0.5 recommended)
+    
+    # Eye State Detection Thresholds
+    EYE_CLOSED_THRESHOLD: float = 0.33  # Eye openness < 33% = closed
+    EYE_OPEN_THRESHOLD: float = 0.40    # Eye openness > 45% = open
+    # Values between these thresholds = partially_open
     
     # Movement Tracking Thresholds
     MOVEMENT_STILL_THRESHOLD: float = 0.35

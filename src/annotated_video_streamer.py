@@ -49,6 +49,7 @@ class VisualizationConfig:
     draw_bboxes: bool = True
     draw_pose: bool = True
     draw_face_mesh: bool = True
+    draw_face_mesh_tesselation: bool = False  # Tesselation is expensive, disabled by default
     draw_iris: bool = True
     draw_labels: bool = True
     draw_status: bool = True
@@ -59,6 +60,9 @@ class VisualizationConfig:
     landmark_radius: int = 2
     text_scale: float = 0.6
     text_thickness: int = 2
+    
+    # Performance settings
+    detection_skip_frames: int = 2  # Run detections every N frames (1 = every frame)
 
 
 class AnnotatedVideoStreamer:
@@ -76,8 +80,21 @@ class AnnotatedVideoStreamer:
         """
         self.fps = fps
         self.frame_delay = 1.0 / fps if fps > 0 else 0.1
-        self.config = config or VisualizationConfig()
         self.settings = get_settings()
+        
+        # Load config from settings if not provided
+        if config is None:
+            config = VisualizationConfig(
+                draw_bboxes=self.settings.ANNOTATED_STREAM_DRAW_BBOXES,
+                draw_pose=self.settings.ANNOTATED_STREAM_DRAW_POSE,
+                draw_face_mesh=self.settings.ANNOTATED_STREAM_DRAW_FACE_MESH,
+                draw_face_mesh_tesselation=self.settings.ANNOTATED_STREAM_DRAW_FACE_MESH_TESSELATION,
+                draw_iris=self.settings.ANNOTATED_STREAM_DRAW_IRIS,
+                draw_labels=self.settings.ANNOTATED_STREAM_DRAW_LABELS,
+                draw_status=self.settings.ANNOTATED_STREAM_DRAW_STATUS,
+                detection_skip_frames=self.settings.ANNOTATED_STREAM_DETECTION_SKIP_FRAMES,
+            )
+        self.config = config
         
         # Thread synchronization
         self._running = False
@@ -98,7 +115,17 @@ class AnnotatedVideoStreamer:
         self._face_mesh = None
         self._iris = None
         
-        logger.info(f"AnnotatedVideoStreamer initialized (fps={fps})")
+        # Frame skipping for performance
+        self._frame_counter = 0
+        self._cached_detections = None
+        
+        # Landmark smoothing for stable visualizations (reduces jitter)
+        self._smoothed_face_landmarks = None
+        self._smoothed_iris_left = None
+        self._smoothed_iris_right = None
+        self._landmark_smoothing_alpha = self.settings.ANNOTATED_STREAM_LANDMARK_SMOOTHING  # 0.0=max smooth, 1.0=no smoothing
+        
+        logger.info(f"AnnotatedVideoStreamer initialized (fps={fps}, skip_frames={self.config.detection_skip_frames})")
     
     def _load_agents(self):
         """Load detection agents (lazy loading)."""
@@ -235,18 +262,72 @@ class AnnotatedVideoStreamer:
                 cv2.circle(frame, (x, y), self.config.landmark_radius + 1, 
                           COLOR_POSE_SKELETON, -1)
     
+    def _smooth_landmarks(self, landmarks: List[Dict[str, int]], prev_smoothed: Optional[List[Dict[str, int]]]) -> List[Dict[str, int]]:
+        """Apply temporal smoothing to landmarks to reduce jitter.
+        
+        Args:
+            landmarks: Current frame landmarks
+            prev_smoothed: Previously smoothed landmarks (or None for first frame)
+            
+        Returns:
+            Smoothed landmarks
+        """
+        if prev_smoothed is None or len(prev_smoothed) != len(landmarks):
+            # Initialize smoothed landmarks on first frame or if count changed
+            return landmarks
+        
+        # Apply exponential moving average (EMA) smoothing
+        smoothed = []
+        alpha = self._landmark_smoothing_alpha
+        
+        for current, prev_smooth in zip(landmarks, prev_smoothed):
+            smoothed_x = int(alpha * current["x"] + (1 - alpha) * prev_smooth["x"])
+            smoothed_y = int(alpha * current["y"] + (1 - alpha) * prev_smooth["y"])
+            smoothed.append({"x": smoothed_x, "y": smoothed_y})
+        
+        return smoothed
+    
+    def _smooth_point(self, point: Dict[str, int], prev_point: Optional[Dict[str, int]]) -> Dict[str, int]:
+        """Apply temporal smoothing to a single point.
+        
+        Args:
+            point: Current point coordinates
+            prev_point: Previously smoothed point (or None)
+            
+        Returns:
+            Smoothed point
+        """
+        if prev_point is None:
+            return point
+        
+        alpha = self._landmark_smoothing_alpha
+        smoothed_x = int(alpha * point["x"] + (1 - alpha) * prev_point["x"])
+        smoothed_y = int(alpha * point["y"] + (1 - alpha) * prev_point["y"])
+        
+        return {"x": smoothed_x, "y": smoothed_y}
+    
     def _draw_face_mesh(self, frame: np.ndarray, face_mesh_result: Dict[str, Any], focus_box: Optional[Dict[str, Any]] = None):
         """Draw face mesh landmarks with tesselation."""
         if not self.config.draw_face_mesh or not face_mesh_result.get("face_detected"):
+            # Reset smoothing if no face detected
+            self._smoothed_face_landmarks = None
             return
         
         landmarks = face_mesh_result.get("landmarks_px")
         if not landmarks or len(landmarks) == 0:
+            self._smoothed_face_landmarks = None
             return
         
+        # Apply temporal smoothing to reduce jitter
+        landmarks = self._smooth_landmarks(landmarks, self._smoothed_face_landmarks)
+        self._smoothed_face_landmarks = landmarks
+        
         # Draw FACEMESH_TESSELATION first (the triangular mesh covering the face)
-        if mp is not None and hasattr(mp.solutions.face_mesh, 'FACEMESH_TESSELATION'):
-            tesselation_color = (128, 128, 128)  # Gray color for subtle appearance
+        # NOTE: This is very expensive (~468 lines per frame) - only enable if needed
+        if (self.config.draw_face_mesh_tesselation and 
+            mp is not None and 
+            hasattr(mp.solutions.face_mesh, 'FACEMESH_TESSELATION')):
+            tesselation_color = (80, 80, 80)  # Darker gray for less visual clutter
             for connection in mp.solutions.face_mesh.FACEMESH_TESSELATION:
                 start_idx = connection[0]
                 end_idx = connection[1]
@@ -314,8 +395,11 @@ class AnnotatedVideoStreamer:
                     cv2.line(frame, (start_x, start_y), (end_x, end_y), color, thickness)
     
     def _draw_iris_tracking(self, frame: np.ndarray, iris_result: Dict[str, Any], focus_box: Optional[Dict[str, Any]] = None):
-        """Draw iris centers and gaze direction."""
+        """Draw iris centers and gaze direction with smoothing."""
         if not self.config.draw_iris or not iris_result.get("iris_detected"):
+            # Reset smoothing if no iris detected
+            self._smoothed_iris_left = None
+            self._smoothed_iris_right = None
             return
         
         offset_x = 0
@@ -324,19 +408,29 @@ class AnnotatedVideoStreamer:
             bbox = focus_box["bbox"]
             offset_x, offset_y = bbox[0], bbox[1]
         
-        # Draw left iris
+        # Draw left iris with smoothing
         if iris_result.get("left_iris"):
             left_iris = iris_result["left_iris"]
-            x = int(left_iris.get("x", 0))
-            y = int(left_iris.get("y", 0))
+            current_point = {"x": int(left_iris.get("x", 0)), "y": int(left_iris.get("y", 0))}
+            
+            # Apply smoothing
+            smoothed_point = self._smooth_point(current_point, self._smoothed_iris_left)
+            self._smoothed_iris_left = smoothed_point
+            
+            x, y = smoothed_point["x"], smoothed_point["y"]
             cv2.circle(frame, (x, y), 3, COLOR_IRIS, -1)
             cv2.circle(frame, (x, y), 8, COLOR_IRIS, 1)
         
-        # Draw right iris
+        # Draw right iris with smoothing
         if iris_result.get("right_iris"):
             right_iris = iris_result["right_iris"]
-            x = int(right_iris.get("x", 0))
-            y = int(right_iris.get("y", 0))
+            current_point = {"x": int(right_iris.get("x", 0)), "y": int(right_iris.get("y", 0))}
+            
+            # Apply smoothing
+            smoothed_point = self._smooth_point(current_point, self._smoothed_iris_right)
+            self._smoothed_iris_right = smoothed_point
+            
+            x, y = smoothed_point["x"], smoothed_point["y"]
             cv2.circle(frame, (x, y), 3, COLOR_IRIS, -1)
             cv2.circle(frame, (x, y), 8, COLOR_IRIS, 1)
     
@@ -451,6 +545,42 @@ class AnnotatedVideoStreamer:
         # Ensure agents are loaded
         self._load_agents()
         
+        # Smart frame skipping: Always run YOLO (fast) for responsive tracking,
+        # but cache heavy operations (pose, face mesh, iris, emotion)
+        self._frame_counter += 1
+        should_run_heavy_detections = (self._frame_counter % self.config.detection_skip_frames == 0)
+        
+        if should_run_heavy_detections or self._cached_detections is None:
+            # Run full detection pipeline (YOLO + heavy detections)
+            detections = self._run_full_detections(frame_bgr)
+            self._cached_detections = detections
+        else:
+            # Run YOLO only (for responsive bounding boxes), reuse cached heavy detections
+            detections = self._run_yolo_only_and_merge_cache(frame_bgr)
+        
+        # Always draw visualizations on the current frame
+        self._draw_all_visualizations(frame_bgr, detections)
+        
+        return frame_bgr
+    
+    def _run_yolo_only_and_merge_cache(self, frame_bgr: np.ndarray) -> Dict[str, Any]:
+        """Run YOLO only and merge with cached heavy detections."""
+        # Start with cached detections
+        detections = self._cached_detections.copy() if self._cached_detections else {}
+        
+        # Always run YOLO for responsive tracking
+        yolo_result = self._yolo.detect(frame_bgr)
+        detections["yolo"] = yolo_result
+        
+        # Update summary with fresh YOLO results
+        if "summary" not in detections:
+            detections["summary"] = {}
+        detections["summary"]["baby_detected"] = yolo_result.get("baby_detected", False)
+        
+        return detections
+    
+    def _run_full_detections(self, frame_bgr: np.ndarray) -> Dict[str, Any]:
+        """Run all detection models on the frame."""
         # Initialize detection results
         detections = {
             "summary": {
@@ -469,9 +599,6 @@ class AnnotatedVideoStreamer:
             yolo_result = self._yolo.detect(frame_bgr)
             detections["yolo"] = yolo_result
             detections["summary"]["baby_detected"] = yolo_result.get("baby_detected", False)
-            
-            # Draw bounding boxes
-            self._draw_bounding_boxes(frame_bgr, yolo_result)
             
             # Get focus box from ANY detected person (baby OR adult)
             # Priority: baby > adult > None (whole frame)
@@ -506,9 +633,6 @@ class AnnotatedVideoStreamer:
                     pose_result = self._pose.analyze(frame_bgr, focus_box)
                     detections["pose"] = pose_result
                     detections["summary"]["pose"] = pose_result.get("pose_label", "unknown")
-                    
-                    # Draw pose skeleton
-                    self._draw_pose_skeleton(frame_bgr, pose_result, focus_box)
                 except Exception as e:
                     logger.error(f"Pose estimation error: {e}")
             
@@ -541,9 +665,6 @@ class AnnotatedVideoStreamer:
                         logger.debug(f"Face mesh detected - eyes: {face_mesh_result.get('eyes_state')}, EAR: {face_mesh_result.get('eye_aspect_ratio', {}).get('average', 'N/A')}")
                     
                     detections["summary"]["face_down"] = face_mesh_result.get("face_down_detected", False)
-                    
-                    # Draw face mesh
-                    self._draw_face_mesh(frame_bgr, face_mesh_result, focus_box)
                 except Exception as e:
                     logger.error(f"Face mesh error: {e}")
             
@@ -559,9 +680,6 @@ class AnnotatedVideoStreamer:
                         logger.debug(f"Iris detected - eyes: {iris_result.get('eyes_state')}, "
                                    f"openness: {iris_result.get('eye_openness', {}).get('average', 'N/A')}, "
                                    f"pattern: {iris_result.get('closure_pattern', 'N/A')}")
-                    
-                    # Draw iris tracking
-                    self._draw_iris_tracking(frame_bgr, iris_result, focus_box)
                     
                     # Build combined facial state
                     detections["combined_facial_state"] = self._build_combined_facial_state(
@@ -585,13 +703,45 @@ class AnnotatedVideoStreamer:
                 except Exception as e:
                     logger.error(f"Iris tracking error: {e}")
             
-            # Draw status overlay
-            self._draw_status_overlay(frame_bgr, detections)
+        except Exception as e:
+            logger.error(f"Error during detection: {e}")
+        
+        return detections
+    
+    def _draw_all_visualizations(self, frame: np.ndarray, detections: Dict[str, Any]):
+        """Draw all visualizations on the frame."""
+        try:
+            # 1. Draw bounding boxes
+            if detections.get("yolo"):
+                self._draw_bounding_boxes(frame, detections["yolo"])
+            
+            # Get focus box for coordinate calculations
+            focus_box = None
+            yolo_result = detections.get("yolo", {})
+            if yolo_result.get("primary_baby_box"):
+                bbox = yolo_result["primary_baby_box"]["bbox"]
+                focus_box = {"bbox": [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]}
+            elif yolo_result.get("adult_boxes") and len(yolo_result["adult_boxes"]) > 0:
+                bbox = yolo_result["adult_boxes"][0]["bbox"]
+                focus_box = {"bbox": [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]}
+            
+            # 2. Draw pose skeleton
+            if detections.get("pose"):
+                self._draw_pose_skeleton(frame, detections["pose"], focus_box)
+            
+            # 3. Draw face mesh
+            if detections.get("face_mesh"):
+                self._draw_face_mesh(frame, detections["face_mesh"], focus_box)
+            
+            # 4. Draw iris tracking
+            if detections.get("iris_tracking"):
+                self._draw_iris_tracking(frame, detections["iris_tracking"], focus_box)
+            
+            # 5. Draw status overlay
+            self._draw_status_overlay(frame, detections)
             
         except Exception as e:
-            logger.error(f"Error during detection and annotation: {e}")
-        
-        return frame_bgr
+            logger.error(f"Error during visualization: {e}")
     
     def _build_combined_facial_state(self, emotion_result: Optional[Dict], 
                                      face_mesh_result: Optional[Dict], 
@@ -782,7 +932,8 @@ def get_annotated_streamer() -> AnnotatedVideoStreamer:
     
     with _streamer_lock:
         if _annotated_streamer is None:
-            _annotated_streamer = AnnotatedVideoStreamer(fps=10)
+            settings = get_settings()
+            _annotated_streamer = AnnotatedVideoStreamer(fps=settings.ANNOTATED_STREAM_FPS)
         
         return _annotated_streamer
 

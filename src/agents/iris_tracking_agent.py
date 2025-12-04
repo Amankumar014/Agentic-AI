@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
 
+from src.config import get_settings
+
 try:
     import mediapipe as mp  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -144,13 +146,10 @@ class IrisTracker:
             right_iris_center, right_eye_left, right_eye_right
         )
 
-        # Determine if eyes are closed/open
-        # Adjusted thresholds for better detection:
-        # - Eyes are considered closed if openness < 0.20 (was 0.15)
-        # - Eyes are considered open if openness > 0.30 (was 0.22)
-        # - Between 0.20-0.30 is partially_open
-        eyes_closed = avg_eye_openness < 0.30
-        eyes_open = avg_eye_openness > 0.40
+        # Determine if eyes are closed/open using configurable thresholds
+        settings = get_settings()
+        eyes_closed = avg_eye_openness < settings.EYE_CLOSED_THRESHOLD
+        eyes_open = avg_eye_openness > settings.EYE_OPEN_THRESHOLD
         
         # Track blink events
         current_time = time.time()
