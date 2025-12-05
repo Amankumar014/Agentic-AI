@@ -304,6 +304,31 @@ export function getAnnotatedStreamUrl() {
   return `${BASE_URL}/api/v1/stream/annotated/`;
 }
 
+/**
+ * ============================================
+ * 6. REAL-TIME DETECTIONS
+ * ============================================
+ */
+
+/**
+ * Get latest detection data (REST fallback for WebSocket)
+ * GET /api/v1/detections/latest
+ * @returns {Promise<Object>} - Latest detection data with yolo, pose, movement, emotion, etc.
+ */
+export async function getLatestDetection() {
+  return fetchApi('/api/v1/detections/latest');
+}
+
+/**
+ * Get WebSocket URL for live detections
+ * @returns {string} - WebSocket URL for live detection stream
+ */
+export function getDetectionWebSocketUrl() {
+  const wsProtocol = BASE_URL.startsWith('https') ? 'wss' : 'ws';
+  const baseWithoutProtocol = BASE_URL.replace('http://', '').replace('https://', '');
+  return `${wsProtocol}://${baseWithoutProtocol}/api/v1/detections/live`;
+}
+
 // Export all functions as default object as well
 const ApiService = {
   checkHealth,
@@ -320,6 +345,8 @@ const ApiService = {
   getBaseUrl,
   getStreamUrl,
   getAnnotatedStreamUrl,
+  getLatestDetection,
+  getDetectionWebSocketUrl,
 };
 
 export default ApiService;

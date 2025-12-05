@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { VideoFeed, StatusCard, DetectionLegend } from '../components';
+import { VideoFeed, StatusCard, DetectionLegend, DetectionMonitor } from '../components';
 import wsService from '../services/WebSocketService';
 import { uploadFrame, uploadFrameWithAudio, formatErrorMessage, getStreamUrl, getAnnotatedStreamUrl } from '../services/ApiService';
 
@@ -433,32 +433,8 @@ function LiveFeed({ config }) {
 
         {/* Sidebar - Status Cards */}
         <div className="space-y-6">
-          {/* Baby Status */}
-          <StatusCard
-            title="Baby Status"
-            status={getBabyStateText()}
-            isActive={status.babyDetected}
-            severity={getBabyStateSeverity()}
-            icon="👶"
-          />
-
-          {/* Adult Detection */}
-          <StatusCard
-            title="Adult Present"
-            status={status.adultDetected ? 'Yes' : 'No'}
-            isActive={status.adultDetected}
-            severity={status.adultDetected ? 'info' : 'info'}
-            icon="👤"
-          />
-
-          {/* Crying Detection */}
-          <StatusCard
-            title="Crying Detection"
-            status={status.crying ? 'Detected' : 'None'}
-            isActive={status.crying}
-            severity={status.crying ? 'critical' : 'success'}
-            icon="😢"
-          />
+          {/* Real-Time Detection Monitor */}
+          <DetectionMonitor enablePollingFallback={true} autoConnect={true} />
 
           {/* Connection Status */}
           <div className="bg-white rounded-2xl p-6 shadow-soft">

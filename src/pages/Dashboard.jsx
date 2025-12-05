@@ -5,7 +5,8 @@ import {
   AlertCard,
   DailySummaryCard,
   ActivityItem,
-  DetectionLegend
+  DetectionLegend,
+  DetectionMonitor
 } from '../components';
 import wsService from '../services/WebSocketService';
 import { getStats, getAlerts, getStreamUrl, getAnnotatedStreamUrl } from '../services/ApiService';
@@ -304,6 +305,9 @@ function Dashboard({ config }) {
 
         {/* Right Column - Monitoring Cards */}
         <div className="space-y-6">
+          {/* Real-Time Detection Monitor */}
+          <DetectionMonitor enablePollingFallback={true} autoConnect={true} />
+
           {/* Audio Monitor Card */}
           <div className="bg-white rounded-2xl p-6 shadow-soft">
             <div className="flex items-center justify-between mb-4">
