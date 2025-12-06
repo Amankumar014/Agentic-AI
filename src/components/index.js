@@ -7,6 +7,7 @@ export { default as ActivityItem } from './common/ActivityItem';
 export { default as Chatbot } from './common/Chatbot';
 export { default as DetectionLegend } from './common/DetectionLegend';
 export { default as DetectionMonitor } from './common/DetectionMonitor';
+export { default as AudioMonitor } from './common/AudioMonitor';
 
 // Layout Components
 export { default as NavSidebar } from './layout/NavSidebar';

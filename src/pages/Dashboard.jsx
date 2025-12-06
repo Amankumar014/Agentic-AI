@@ -6,7 +6,8 @@ import {
   DailySummaryCard,
   ActivityItem,
   DetectionLegend,
-  DetectionMonitor
+  DetectionMonitor,
+  AudioMonitor
 } from '../components';
 import wsService from '../services/WebSocketService';
 import { getStats, getAlerts, getStreamUrl, getAnnotatedStreamUrl } from '../services/ApiService';
@@ -308,32 +309,8 @@ function Dashboard({ config }) {
           {/* Real-Time Detection Monitor */}
           <DetectionMonitor enablePollingFallback={true} autoConnect={true} />
 
-          {/* Audio Monitor Card */}
-          <div className="bg-white rounded-2xl p-6 shadow-soft">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2">
-                <span className="text-lg">🎤</span>
-                <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
-                  Audio Monitor
-                </h3>
-              </div>
-              <span className="text-lg">💧</span>
-            </div>
-            <div className="h-20 flex items-center justify-center bg-slate-50 rounded-xl">
-              <div className="flex items-center space-x-1">
-                {[...Array(20)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-1 bg-primary-400 rounded-full"
-                    style={{
-                      height: `${Math.random() * 40 + 10}px`,
-                      opacity: 0.3 + Math.random() * 0.5
-                    }}
-                  ></div>
-                ))}
-              </div>
-            </div>
-          </div>
+          {/* Real-Time Audio Monitor */}
+          <AudioMonitor enablePollingFallback={true} autoConnect={true} />
 
           {/* Temperature & Humidity */}
           <div className="bg-white rounded-2xl p-6 shadow-soft">

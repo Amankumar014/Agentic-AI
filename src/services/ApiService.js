@@ -305,6 +305,16 @@ export function getAnnotatedStreamUrl() {
 }
 
 /**
+ * Get audio stream URL (live audio from baby monitor)
+ * Continuous WAV audio stream from the baby monitor microphone
+ * Can be played using HTML5 <audio> element
+ * @returns {string} - Full URL to the audio stream endpoint
+ */
+export function getAudioStreamUrl() {
+  return `${BASE_URL}/api/v1/stream/audio/`;
+}
+
+/**
  * ============================================
  * 6. REAL-TIME DETECTIONS
  * ============================================
@@ -345,6 +355,7 @@ const ApiService = {
   getBaseUrl,
   getStreamUrl,
   getAnnotatedStreamUrl,
+  getAudioStreamUrl,
   getLatestDetection,
   getDetectionWebSocketUrl,
 };

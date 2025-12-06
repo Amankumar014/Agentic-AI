@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { VideoFeed, StatusCard, DetectionLegend, DetectionMonitor } from '../components';
+import { VideoFeed, StatusCard, DetectionLegend, DetectionMonitor, AudioMonitor } from '../components';
 import wsService from '../services/WebSocketService';
 import { uploadFrame, uploadFrameWithAudio, formatErrorMessage, getStreamUrl, getAnnotatedStreamUrl } from '../services/ApiService';
 
@@ -435,6 +435,9 @@ function LiveFeed({ config }) {
         <div className="space-y-6">
           {/* Real-Time Detection Monitor */}
           <DetectionMonitor enablePollingFallback={true} autoConnect={true} />
+
+          {/* Real-Time Audio Monitor */}
+          <AudioMonitor enablePollingFallback={true} autoConnect={true} />
 
           {/* Connection Status */}
           <div className="bg-white rounded-2xl p-6 shadow-soft">
