@@ -6,6 +6,7 @@ import Settings from './pages/Settings';
 import LiveFeed from './pages/LiveFeed';
 import SleepLogs from './pages/SleepLogs';
 import Activity from './pages/Activity';
+import Payment from './pages/Payment';
 import wsService from './services/WebSocketService';
 import { checkHealth, getBaseUrl } from './services/ApiService';
 
@@ -87,6 +88,8 @@ function App() {
         return <Activity />;
       case 'alerts':
         return <Alerts />;
+      case 'payment':
+        return <Payment />;
       case 'settings':
         return <Settings />;
       default:
