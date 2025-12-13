@@ -11,6 +11,7 @@ from starlette.requests import Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlmodel import select
 import asyncio
+import numpy as np
 
 from src.config import get_settings
 from src.models import get_session, FrameAnalysisLog, AlertLog
@@ -599,6 +600,134 @@ async def stream_video(request: Request):
             "Connection": "keep-alive",
         }
     )
+
+
+@router.get("/stream/audio/")
+async def stream_audio(request: Request):
+    """
+    Stream live audio feed in continuous WAV format.
+    
+    This endpoint provides a continuous audio stream that can be played
+    directly in an HTML audio element:
+        <audio src="http://localhost:8000/api/v1/stream/audio/" autoplay controls></audio>
+    
+    Features:
+        - Real-time audio streaming from microphone
+        - WAV format (PCM 16-bit, mono, 16kHz)
+        - Thread-safe for multiple concurrent listeners
+        - Automatic start/stop based on listeners
+        - Handles client disconnections gracefully
+    
+    Returns:
+        StreamingResponse: Continuous WAV audio stream
+    """
+    from src.audio_streamer import get_audio_streamer
+    import struct
+    
+    # Get the audio streamer instance
+    audio_streamer = get_audio_streamer()
+    
+    # Check if audio is available
+    if not audio_streamer.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Audio device not available. Please install sounddevice: pip install sounddevice"
+        )
+    
+    # Register this listener
+    audio_streamer.add_viewer()
+    
+    # Wait a moment for audio to initialize
+    await asyncio.sleep(0.1)
+    
+    async def generate_audio():
+        """Generate continuous WAV audio stream."""
+        sample_rate = audio_streamer.get_sample_rate()
+        channels = 1  # Mono
+        sample_width = 2  # 16-bit
+        
+        # Send WAV header first
+        wav_header = _create_wav_header(sample_rate, channels, sample_width)
+        yield wav_header
+        
+        try:
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                # Get latest audio chunk
+                audio_chunk = audio_streamer.get_latest_chunk()
+                
+                if audio_chunk is None:
+                    # No audio available yet, wait and retry
+                    await asyncio.sleep(0.1)
+                    continue
+                
+                # Convert float32 to int16 PCM
+                audio_int16 = (audio_chunk * 32767).astype(np.int16)
+                
+                # Convert to bytes
+                audio_bytes = audio_int16.tobytes()
+                
+                yield audio_bytes
+                
+                # Small delay to control streaming rate
+                await asyncio.sleep(0.1)
+        
+        except asyncio.CancelledError:
+            # Client disconnected
+            pass
+        except Exception as e:
+            logger.error(f"Error in audio stream: {e}")
+        finally:
+            # Unregister this listener
+            audio_streamer.remove_viewer()
+    
+    return StreamingResponse(
+        generate_audio(),
+        media_type="audio/wav",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+def _create_wav_header(sample_rate: int, channels: int, sample_width: int) -> bytes:
+    """
+    Create a WAV file header for streaming audio.
+    
+    Args:
+        sample_rate: Sample rate in Hz
+        channels: Number of audio channels (1=mono, 2=stereo)
+        sample_width: Sample width in bytes (2=16-bit, 4=32-bit)
+    
+    Returns:
+        WAV header bytes (44 bytes)
+    """
+    import struct
+    
+    # WAV header format (44 bytes total)
+    # We use a large data size since it's a stream
+    data_size = 0xFFFFFFFF - 36  # Maximum size for infinite stream
+    
+    header = struct.pack('<4sI4s', b'RIFF', data_size + 36, b'WAVE')
+    header += struct.pack('<4sIHHIIHH',
+        b'fmt ',  # Chunk ID
+        16,  # Chunk size (16 for PCM)
+        1,  # Audio format (1 = PCM)
+        channels,  # Number of channels
+        sample_rate,  # Sample rate
+        sample_rate * channels * sample_width,  # Byte rate
+        channels * sample_width,  # Block align
+        sample_width * 8  # Bits per sample
+    )
+    header += struct.pack('<4sI', b'data', data_size)
+    
+    return header
 
 
 @router.get("/stream/annotated/")

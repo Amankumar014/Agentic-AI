@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 
 from src.camera_streamer import get_camera_streamer
+from src.audio_streamer import get_audio_streamer
 from src.agents import (
     get_yolo_detector,
     get_pose_analyzer,
@@ -23,9 +24,9 @@ from src.agents import (
     get_emotion_detector,
     get_face_mesh_analyzer,
     get_iris_tracker,
+    get_audio_analyzer,
 )
 from src.config import get_settings
-from src.audio_agent_placeholder import extract_librosa_features, classify_cry
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,12 @@ class DetectionBroadcaster:
         logger.info("Detection loop started")
         
         streamer = get_camera_streamer()
+        audio_streamer = get_audio_streamer()
+        
+        # Start audio capture when detection starts
+        if self.settings.ENABLE_AUDIO_MONITORING:
+            audio_streamer.add_viewer()
+            logger.info("Audio monitoring enabled")
         
         while self._running:
             try:
@@ -159,6 +166,11 @@ class DetectionBroadcaster:
                 logger.error(f"Error in detection loop: {e}", exc_info=True)
                 time.sleep(1.0)
         
+        # Stop audio capture when detection stops
+        if self.settings.ENABLE_AUDIO_MONITORING:
+            audio_streamer.remove_viewer()
+            logger.info("Audio monitoring stopped")
+        
         logger.info("Detection loop stopped")
     
     def _decode_frame(self, frame_bytes: bytes) -> Optional[np.ndarray]:
@@ -170,6 +182,49 @@ class DetectionBroadcaster:
         except Exception as e:
             logger.error(f"Error decoding frame: {e}")
             return None
+    
+    def _run_audio_analysis(self) -> Dict[str, Any]:
+        """Run audio analysis on latest audio chunk."""
+        try:
+            audio_streamer = get_audio_streamer()
+            audio_analyzer = get_audio_analyzer()
+            
+            # Check if audio is available
+            if not audio_streamer.is_available():
+                return {
+                    "enabled": True,
+                    "available": False,
+                    "reason": "Audio device not available (sounddevice not installed or no microphone)"
+                }
+            
+            # Get latest audio chunk
+            audio_chunk = audio_streamer.get_latest_chunk()
+            
+            if audio_chunk is None:
+                return {
+                    "enabled": True,
+                    "available": True,
+                    "audio_detected": False,
+                    "reason": "No audio data available yet"
+                }
+            
+            # Analyze audio
+            sample_rate = audio_streamer.get_sample_rate()
+            analysis = audio_analyzer.analyze(audio_chunk, sample_rate)
+            
+            # Add enabled flag
+            analysis["enabled"] = True
+            analysis["available"] = True
+            
+            return analysis
+        
+        except Exception as e:
+            logger.error(f"Error in audio analysis: {e}", exc_info=True)
+            return {
+                "enabled": True,
+                "available": False,
+                "error": str(e)
+            }
     
     def _run_detections(self, frame_bgr: np.ndarray) -> Dict[str, Any]:
         """Run all detection agents on the frame."""
@@ -256,7 +311,17 @@ class DetectionBroadcaster:
                 results.get("iris_tracking")
             )
             
-            # 8. Overall summary
+            # 8. Audio Analysis (if enabled)
+            if self.settings.ENABLE_AUDIO_MONITORING:
+                audio_result = self._run_audio_analysis()
+                results["audio"] = audio_result
+            else:
+                results["audio"] = {
+                    "enabled": False,
+                    "reason": "Audio monitoring disabled in settings"
+                }
+            
+            # 9. Overall summary
             results["summary"] = self._build_summary(results)
             
         except Exception as e:
@@ -369,6 +434,15 @@ class DetectionBroadcaster:
             summary["eyes_state"] = combined.get("likely_state", "unknown")
             summary["crying"] = combined.get("likely_crying", False)
             summary["face_down"] = combined.get("face_down_risk", False)
+        
+        # Audio summary
+        audio = results.get("audio", {})
+        if audio.get("enabled") and audio.get("available"):
+            summary["audio_detected"] = audio.get("audio_detected", False)
+            summary["audio_crying"] = audio.get("is_crying", False)
+            summary["audio_awakening"] = audio.get("is_awakening", False)
+            summary["audio_sound_type"] = audio.get("sound_type", "unknown")
+            summary["audio_noise_level"] = audio.get("noise_level", -100.0)
         
         return summary
     

@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 16000  # Hz
     AUDIO_DURATION: int = 3  # seconds
     
+    # Real-Time Audio Monitoring Settings
+    ENABLE_AUDIO_MONITORING: bool = True  # Enable continuous audio monitoring
+    AUDIO_DEVICE_INDEX: Optional[int] = None  # Audio device index (None = default)
+    AUDIO_BUFFER_DURATION: int = 5  # Seconds of audio to keep in rolling buffer
+    AUDIO_ANALYSIS_INTERVAL: float = 1.0  # Seconds between analyses (matches detection interval)
+    AUDIO_SILENCE_THRESHOLD: float = 0.01  # RMS threshold for silence detection
+    AUDIO_AWAKENING_THRESHOLD: float = 0.1  # RMS increase to detect awakening
+    
     # Alert Cooldown Settings
     ALERT_COOLDOWN_MINUTES: int = 5  # minutes between alerts of same type
     

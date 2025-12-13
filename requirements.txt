@@ -1,6 +1,7 @@
 # Python dependencies
 # Will be populated with required packages
 
+# Core API Framework
 fastapi
 uvicorn[standard]
 sqlmodel
@@ -9,31 +10,40 @@ pydantic-settings
 python-dotenv
 aiofiles
 httpx
+python-multipart
+
+# LangGraph & AI
 langgraph
 openai
 langchain
 transformers
 torch
+
+# Computer Vision
 opencv-python-headless==4.10.0.84
 mediapipe
 protobuf<5,>=4.25.3
-librosa
-sounddevice
-scipy
-Pillow
-scikit-learn
-joblib
-twilio
 ultralytics
+Pillow
 
+# Audio Monitoring (Real-Time)
+librosa                 # Audio feature extraction (MFCC, ZCR, spectral analysis)
+sounddevice            # Real-time audio I/O from microphone
+scipy                  # Signal processing, WAV file handling
+
+# Machine Learning
+scikit-learn           # ML models for cry detection
+joblib                 # Model serialization
 numpy==1.26.4
 ml-dtypes==0.3.2
 
+# Alerts & Notifications
+twilio
+
 pytest
-python-multipart
 pytest-asyncio
 
-# Chatbot RAG dependencies
+# Chatbot RAG Dependencies
 sentence-transformers
 faiss-cpu
 pypdf
